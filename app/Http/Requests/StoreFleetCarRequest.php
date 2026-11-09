@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Services\CarRentalService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -10,6 +11,15 @@ class StoreFleetCarRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->input('vehicle_vin'))) {
+            $this->merge([
+                'vehicle_vin' => CarRentalService::normalizeVehicleVin($this->input('vehicle_vin')),
+            ]);
+        }
     }
 
     public function rules(): array

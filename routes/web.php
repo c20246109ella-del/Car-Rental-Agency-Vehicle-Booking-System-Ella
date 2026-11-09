@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\FleetCarController;
 use App\Http\Controllers\RentalController;
 use Inertia\Inertia;
@@ -18,6 +19,11 @@ Route::middleware(['auth'])->group(function () {
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';
 
+Route::get('/customers/create', [CustomerController::class, 'create'])
+    ->name('customers.create');
+
+Route::post('/customers', [CustomerController::class, 'store'])
+    ->name('customers.store');
 
 // Fleet Car Routes
 Route::get('/fleet-cars', [FleetCarController::class, 'index'])

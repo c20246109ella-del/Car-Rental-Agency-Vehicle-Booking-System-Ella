@@ -1,6 +1,6 @@
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, CalendarDays, CheckCircle2, CircleHelp, ClipboardPlus, LoaderCircle, UserRound, Wallet } from 'lucide-react';
+import { ArrowLeft, CalendarDays, CheckCircle2, CircleHelp, ClipboardPlus, LoaderCircle, UserRound, UserRoundPlus, Wallet } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 
 import InputError from '@/components/input-error';
@@ -160,14 +160,22 @@ export default function CreateRental({ customers, fleetCars }: { customers: Cust
                     <div className="space-y-6">
                         <Card className="border-border/80 shadow-sm">
                             <CardHeader className="border-border/70 border-b">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-primary/5 text-primary flex size-9 items-center justify-center rounded-lg">
-                                        <UserRound className="size-4" />
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-primary/5 text-primary flex size-9 items-center justify-center rounded-lg">
+                                            <UserRound className="size-4" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-lg">Who is renting?</CardTitle>
+                                            <CardDescription>Select the customer for this booking.</CardDescription>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <CardTitle className="text-lg">Who is renting?</CardTitle>
-                                        <CardDescription>Select the customer for this booking.</CardDescription>
-                                    </div>
+                                    <Button asChild size="sm" variant="outline">
+                                        <Link href="/customers/create">
+                                            <UserRoundPlus />
+                                            Add customer
+                                        </Link>
+                                    </Button>
                                 </div>
                             </CardHeader>
                             <CardContent className="pt-6">

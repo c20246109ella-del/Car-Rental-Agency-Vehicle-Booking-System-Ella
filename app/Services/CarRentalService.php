@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\CarModel;
+use App\Models\Customer;
 use App\Models\FleetCar;
 use App\Models\Rental;
 use Illuminate\Support\Facades\DB;
@@ -17,9 +18,30 @@ class CarRentalService
     |--------------------------------------------------------------------------
     */
 
-    private function cleanString(string $value): string
+    private static function cleanString(string $value): string
     {
         return trim(strip_tags($value));
+    }
+
+    public static function normalizeVehicleVin(string $value): string
+    {
+        return strtoupper(self::cleanString($value));
+    }
+
+    public static function normalizeDriverLicense(string $value): string
+    {
+        return strtoupper(self::cleanString($value));
+    }
+
+    public function createCustomer(array $data): Customer
+    {
+        return DB::transaction(function () use ($data) {
+            return Customer::create([
+                'driver_license' => self::normalizeDriverLicense($data['driver_license']),
+                'customer_name' => self::cleanString($data['customer_name']),
+                'customer_phone' => self::cleanString($data['customer_phone']),
+            ]);
+        });
     }
 
     /*
@@ -31,9 +53,7 @@ class CarRentalService
     public function createFleetCar(array $data): FleetCar
     {
         return DB::transaction(function () use ($data) {
-            $data['vehicle_vin'] = strtoupper(
-                $this->cleanString($data['vehicle_vin'])
-            );
+            $data['vehicle_vin'] = self::normalizeVehicleVin($data['vehicle_vin']);
 
             return FleetCar::create([
                 'vehicle_vin' => $data['vehicle_vin'],
@@ -56,9 +76,7 @@ class CarRentalService
                 ->findOrFail($id);
 
             $fleetCar->update([
-                'vehicle_vin' => strtoupper(
-                    $this->cleanString($data['vehicle_vin'])
-                ),
+                'vehicle_vin' => self::normalizeVehicleVin($data['vehicle_vin']),
                 'car_model_id' => $data['car_model_id'],
             ]);
 
