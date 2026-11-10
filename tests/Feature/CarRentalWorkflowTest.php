@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\FleetCar;
 use App\Models\Rental;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class CarRentalWorkflowTest extends TestCase
@@ -88,6 +89,25 @@ class CarRentalWorkflowTest extends TestCase
             'vehicle_vin' => 'VIN-NEW',
             'car_model_id' => $updatedModel->id,
         ]);
+    }
+
+    public function test_fleet_car_creation_page_lists_existing_vehicles_for_editing(): void
+    {
+        $carModel = CarModel::create([
+            'model_name' => 'Sedan',
+            'daily_rate' => 80.25,
+        ]);
+        FleetCar::create([
+            'vehicle_vin' => 'VIN-123',
+            'car_model_id' => $carModel->id,
+        ]);
+
+        $this->get('/fleet-cars/create')
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('fleet-cars/create')
+                ->has('fleetCars', 1)
+                ->where('fleetCars.0.vehicleVin', 'VIN-123')
+                ->where('fleetCars.0.carModelId', $carModel->id));
     }
 
     public function test_rental_totals_are_calculated_and_overlapping_bookings_are_rejected(): void

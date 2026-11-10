@@ -45,15 +45,26 @@ class FleetCarController extends Controller
     public function create(Request $request): JsonResponse|Response
     {
         $carModels = CarModel::orderBy('model_name')->get();
+        $fleetCars = FleetCar::with('carModel:id,model_name')
+            ->orderBy('vehicle_vin')
+            ->get(['id', 'vehicle_vin', 'car_model_id'])
+            ->map(static fn (FleetCar $fleetCar): array => [
+                'id' => $fleetCar->id,
+                'vehicleVin' => $fleetCar->vehicle_vin,
+                'carModel' => $fleetCar->carModel->model_name,
+                'carModelId' => $fleetCar->car_model_id,
+            ]);
 
         if ($request->expectsJson()) {
             return response()->json([
                 'car_models' => $carModels,
+                'fleet_cars' => $fleetCars,
             ]);
         }
 
         return Inertia::render('fleet-cars/create', [
             'carModels' => $carModels,
+            'fleetCars' => $fleetCars,
         ]);
     }
 

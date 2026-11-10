@@ -1,6 +1,6 @@
 import { type BreadcrumbItem } from '@/types';
 import { TruckIcon } from '@heroicons/react/24/outline';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { ArrowLeft, CarFront, CheckCircle2, CircleHelp, LoaderCircle } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
 
@@ -8,9 +8,11 @@ import InputError from '@/components/input-error';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { ApiFormError, submitJsonForm } from '@/lib/submit-json-form';
 
@@ -20,6 +22,18 @@ type CarModelOption = {
     daily_rate: string;
 };
 
+type FleetCarOption = {
+    id: number;
+    vehicleVin: string;
+    carModel: string;
+    carModelId: number;
+};
+
+type FleetCarEditForm = {
+    vehicleVin: string;
+    carModelId: string;
+};
+
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Fleet cars', href: '/fleet-cars' },
     { title: 'Add vehicle', href: '/fleet-cars/create' },
@@ -27,14 +41,20 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const formatCurrency = (value: string | number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value));
 
-export default function CreateFleetCar({ carModels }: { carModels: CarModelOption[] }) {
+export default function CreateFleetCar({ carModels, fleetCars }: { carModels: CarModelOption[]; fleetCars: FleetCarOption[] }) {
     const [vehicleVin, setVehicleVin] = useState('');
     const [carModelId, setCarModelId] = useState('');
     const vinInputRef = useRef<HTMLInputElement>(null);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [processing, setProcessing] = useState(false);
     const [success, setSuccess] = useState('');
+    const [successTitle, setSuccessTitle] = useState('Vehicle added');
     const [formError, setFormError] = useState('');
+    const [editingFleetCar, setEditingFleetCar] = useState<FleetCarOption | null>(null);
+    const [editForm, setEditForm] = useState<FleetCarEditForm>({ vehicleVin: '', carModelId: '' });
+    const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+    const [editFormError, setEditFormError] = useState('');
+    const [editProcessing, setEditProcessing] = useState(false);
 
     const selectedModel = carModels.find((model) => String(model.id) === carModelId);
 
@@ -43,6 +63,7 @@ export default function CreateFleetCar({ carModels }: { carModels: CarModelOptio
         setErrors({});
         setFormError('');
         setSuccess('');
+        setSuccessTitle('Vehicle added');
         setProcessing(true);
 
         try {
@@ -53,6 +74,7 @@ export default function CreateFleetCar({ carModels }: { carModels: CarModelOptio
             setSuccess(result.message ?? 'Vehicle added to your fleet.');
             setVehicleVin('');
             setCarModelId('');
+            router.reload({ only: ['fleetCars'] });
         } catch (error) {
             if (error instanceof ApiFormError) {
                 setErrors(error.errors);
@@ -62,6 +84,45 @@ export default function CreateFleetCar({ carModels }: { carModels: CarModelOptio
             }
         } finally {
             setProcessing(false);
+        }
+    }
+
+    function openFleetCarEditor(fleetCar: FleetCarOption) {
+        setEditingFleetCar(fleetCar);
+        setEditForm({ vehicleVin: fleetCar.vehicleVin, carModelId: String(fleetCar.carModelId) });
+        setEditErrors({});
+        setEditFormError('');
+    }
+
+    async function saveFleetCar(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (!editingFleetCar) return;
+
+        setEditErrors({});
+        setEditFormError('');
+        setEditProcessing(true);
+        try {
+            const result = await submitJsonForm(
+                route('fleet-cars.update', editingFleetCar.id),
+                {
+                    vehicle_vin: editForm.vehicleVin.trim(),
+                    car_model_id: editForm.carModelId,
+                },
+                'PUT',
+            );
+            setSuccessTitle('Vehicle updated');
+            setSuccess(result.message ?? 'Fleet vehicle updated successfully.');
+            setEditingFleetCar(null);
+            router.reload({ only: ['fleetCars'] });
+        } catch (error) {
+            if (error instanceof ApiFormError) {
+                setEditErrors(error.errors);
+                setEditFormError(Object.keys(error.errors).length === 0 ? error.message : '');
+            } else {
+                setEditFormError(error instanceof Error ? error.message : 'Unable to save the vehicle. Please try again.');
+            }
+        } finally {
+            setEditProcessing(false);
         }
     }
 
@@ -101,7 +162,7 @@ export default function CreateFleetCar({ carModels }: { carModels: CarModelOptio
                 {success && (
                     <Alert className="border-emerald-500/30 bg-emerald-500/5">
                         <CheckCircle2 className="size-4 text-emerald-600" />
-                        <AlertTitle>Vehicle added</AlertTitle>
+                        <AlertTitle>{successTitle}</AlertTitle>
                         <AlertDescription>{success}</AlertDescription>
                     </Alert>
                 )}
@@ -229,7 +290,98 @@ export default function CreateFleetCar({ carModels }: { carModels: CarModelOptio
                         </div>
                     </aside>
                 </div>
+                <Card className="border-border/80 shadow-sm">
+                    <CardHeader>
+                        <CardTitle className="text-lg">Existing fleet vehicles</CardTitle>
+                        <CardDescription>Edit a vehicle’s VIN or assigned model.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {fleetCars.length > 0 ? (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Vehicle</TableHead>
+                                        <TableHead>VIN</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {fleetCars.map((fleetCar) => (
+                                        <TableRow key={fleetCar.id}>
+                                            <TableCell className="font-medium">{fleetCar.carModel}</TableCell>
+                                            <TableCell className="font-mono text-sm">{fleetCar.vehicleVin}</TableCell>
+                                            <TableCell className="text-right">
+                                                <Button variant="ghost" size="sm" onClick={() => openFleetCarEditor(fleetCar)}>
+                                                    Edit
+                                                    <span className="sr-only"> vehicle {fleetCar.vehicleVin}</span>
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        ) : (
+                            <p className="text-muted-foreground py-8 text-center text-sm">No vehicles have been added yet.</p>
+                        )}
+                    </CardContent>
+                </Card>
             </main>
+            <Dialog open={editingFleetCar !== null} onOpenChange={(open) => !open && setEditingFleetCar(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit fleet vehicle</DialogTitle>
+                        <DialogDescription>Update the vehicle identification number or assigned car model.</DialogDescription>
+                    </DialogHeader>
+                    {editingFleetCar && (
+                        <form onSubmit={saveFleetCar} noValidate className="space-y-4">
+                            {editFormError && (
+                                <p role="alert" className="text-destructive text-sm">
+                                    {editFormError}
+                                </p>
+                            )}
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-vehicle-vin">Vehicle identification number (VIN)</Label>
+                                <Input
+                                    id="edit-vehicle-vin"
+                                    value={editForm.vehicleVin}
+                                    onChange={(event) => setEditForm((current) => ({ ...current, vehicleVin: event.target.value }))}
+                                    maxLength={50}
+                                    required
+                                    aria-invalid={Boolean(editErrors.vehicle_vin)}
+                                />
+                                <InputError message={editErrors.vehicle_vin} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-car-model">Car model</Label>
+                                <Select
+                                    value={editForm.carModelId}
+                                    onValueChange={(carModelId) => setEditForm((current) => ({ ...current, carModelId }))}
+                                >
+                                    <SelectTrigger id="edit-car-model" aria-invalid={Boolean(editErrors.car_model_id)}>
+                                        <SelectValue placeholder="Choose a model" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {carModels.map((model) => (
+                                            <SelectItem key={model.id} value={String(model.id)}>
+                                                {model.model_name} · {formatCurrency(model.daily_rate)}/day
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <InputError message={editErrors.car_model_id} />
+                            </div>
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setEditingFleetCar(null)} disabled={editProcessing}>
+                                    Cancel
+                                </Button>
+                                <Button type="submit" disabled={editProcessing || carModels.length === 0}>
+                                    {editProcessing ? 'Saving…' : 'Save changes'}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    )}
+                </DialogContent>
+            </Dialog>
         </AppLayout>
     );
 }
