@@ -101,6 +101,77 @@ class CarRentalWorkflowTest extends TestCase
         $this->assertSame(1, Rental::count());
     }
 
+    public function test_rental_dates_in_the_past_are_rejected(): void
+    {
+        $customer = Customer::create([
+            'driver_license' => 'DL-PAST',
+            'customer_name' => 'Taylor Driver',
+            'customer_phone' => '555-0100',
+        ]);
+        $carModel = CarModel::create([
+            'model_name' => 'Sedan',
+            'daily_rate' => 80.25,
+        ]);
+        $fleetCar = FleetCar::create([
+            'vehicle_vin' => 'VIN-PAST',
+            'car_model_id' => $carModel->id,
+        ]);
+
+        $this->postJson('/rentals', [
+            'customer_id' => $customer->id,
+            'fleet_car_id' => $fleetCar->id,
+            'rental_start_date' => now()->subDay()->toDateString(),
+            'rental_end_date' => now()->addDay()->toDateString(),
+            'insurance_fee' => '0',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('rental_start_date');
+
+        $this->postJson('/rentals', [
+            'customer_id' => $customer->id,
+            'fleet_car_id' => $fleetCar->id,
+            'rental_start_date' => now()->toDateString(),
+            'rental_end_date' => now()->subDay()->toDateString(),
+            'insurance_fee' => '0',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('rental_end_date');
+    }
+
+    public function test_rental_updates_reject_changed_dates_in_the_past(): void
+    {
+        $customer = Customer::create([
+            'driver_license' => 'DL-UPDATE',
+            'customer_name' => 'Taylor Driver',
+            'customer_phone' => '555-0100',
+        ]);
+        $carModel = CarModel::create([
+            'model_name' => 'Sedan',
+            'daily_rate' => 80.25,
+        ]);
+        $fleetCar = FleetCar::create([
+            'vehicle_vin' => 'VIN-UPDATE',
+            'car_model_id' => $carModel->id,
+        ]);
+        $rental = Rental::create([
+            'customer_id' => $customer->id,
+            'fleet_car_id' => $fleetCar->id,
+            'rental_start_date' => now()->toDateString(),
+            'rental_end_date' => now()->addDay()->toDateString(),
+            'total_days' => 1,
+            'daily_rate' => 80.25,
+            'insurance_fee' => 0,
+            'total_rental_cost' => 80.25,
+        ]);
+
+        $this->putJson("/rentals/{$rental->id}", [
+            'customer_id' => $customer->id,
+            'fleet_car_id' => $fleetCar->id,
+            'rental_start_date' => now()->subDay()->toDateString(),
+            'rental_end_date' => now()->toDateString(),
+            'insurance_fee' => '0',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('rental_start_date');
+    }
+
     public function test_vehicle_customer_and_rental_creation_forms_are_available(): void
     {
         $this->get('/fleet-cars/create')->assertOk();

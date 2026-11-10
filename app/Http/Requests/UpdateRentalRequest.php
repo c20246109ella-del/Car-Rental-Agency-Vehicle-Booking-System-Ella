@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Rental;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateRentalRequest extends FormRequest
@@ -13,6 +14,10 @@ class UpdateRentalRequest extends FormRequest
 
     public function rules(): array
     {
+        $rental = Rental::find($this->route('id'));
+        $currentStartDate = $rental?->rental_start_date?->toDateString();
+        $currentEndDate = $rental?->rental_end_date?->toDateString();
+
         return [
             'customer_id' => [
                 'required',
@@ -29,12 +34,22 @@ class UpdateRentalRequest extends FormRequest
             'rental_start_date' => [
                 'required',
                 'date',
+                function ($attribute, $value, $fail) use ($currentStartDate) {
+                    if (is_string($value) && $value < today()->toDateString() && $value !== $currentStartDate) {
+                        $fail('The rental start date cannot be in the past.');
+                    }
+                },
             ],
 
             'rental_end_date' => [
                 'required',
                 'date',
                 'after:rental_start_date',
+                function ($attribute, $value, $fail) use ($currentEndDate) {
+                    if (is_string($value) && $value < today()->toDateString() && $value !== $currentEndDate) {
+                        $fail('The rental end date cannot be in the past.');
+                    }
+                },
             ],
 
             'insurance_fee' => [

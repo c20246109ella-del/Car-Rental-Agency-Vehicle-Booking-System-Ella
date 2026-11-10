@@ -13,7 +13,7 @@ export class ApiFormError extends Error {
     }
 }
 
-export async function submitJsonForm(url: string, data: Record<string, string>): Promise<ApiResponse> {
+export async function submitJsonForm(url: string, data: Record<string, string>, method: 'POST' | 'PUT' = 'POST'): Promise<ApiResponse> {
     const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
 
     if (!csrfToken) {
@@ -21,7 +21,7 @@ export async function submitJsonForm(url: string, data: Record<string, string>):
     }
 
     const response = await fetch(url, {
-        method: 'POST',
+        method,
         headers: {
             Accept: 'application/json',
             'Content-Type': 'application/json',

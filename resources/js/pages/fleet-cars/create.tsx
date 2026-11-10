@@ -1,7 +1,8 @@
 import { type BreadcrumbItem } from '@/types';
+import { TruckIcon } from '@heroicons/react/24/outline';
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, CarFront, CheckCircle2, CircleHelp, LoaderCircle, Sparkles } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { ArrowLeft, CarFront, CheckCircle2, CircleHelp, LoaderCircle } from 'lucide-react';
+import { type FormEvent, useRef, useState } from 'react';
 
 import InputError from '@/components/input-error';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -29,6 +30,7 @@ const formatCurrency = (value: string | number) => new Intl.NumberFormat('en-US'
 export default function CreateFleetCar({ carModels }: { carModels: CarModelOption[] }) {
     const [vehicleVin, setVehicleVin] = useState('');
     const [carModelId, setCarModelId] = useState('');
+    const vinInputRef = useRef<HTMLInputElement>(null);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [processing, setProcessing] = useState(false);
     const [success, setSuccess] = useState('');
@@ -130,6 +132,7 @@ export default function CreateFleetCar({ carModels }: { carModels: CarModelOptio
                                     <div className="grid gap-2">
                                         <Label htmlFor="vehicle_vin">Vehicle identification number (VIN)</Label>
                                         <Input
+                                            ref={vinInputRef}
                                             id="vehicle_vin"
                                             name="vehicle_vin"
                                             value={vehicleVin}
@@ -190,15 +193,28 @@ export default function CreateFleetCar({ carModels }: { carModels: CarModelOptio
                         <Card className="border-border/80 overflow-hidden shadow-sm">
                             <div className="from-primary/10 via-primary/5 bg-gradient-to-br to-transparent p-6">
                                 <div className="bg-background mb-5 flex size-11 items-center justify-center rounded-xl shadow-sm">
-                                    <Sparkles className="text-primary size-5" />
+                                    <TruckIcon aria-hidden="true" className="text-primary size-5" />
                                 </div>
                                 <h2 className="font-semibold">Fleet snapshot</h2>
-                                <p className="text-muted-foreground mt-1 text-sm">Your selection at a glance.</p>
+                                <p className="text-muted-foreground mt-1 text-sm">Preview the vehicle details as you enter them.</p>
                                 <div className="bg-background/80 mt-6 rounded-lg border p-4">
                                     <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Selected model</p>
                                     <p className="mt-2 font-medium">{selectedModel?.model_name ?? 'No model selected'}</p>
                                     {selectedModel && (
                                         <p className="text-muted-foreground mt-1 text-sm">{formatCurrency(selectedModel.daily_rate)} per day</p>
+                                    )}
+                                    <p className="text-muted-foreground mt-4 text-xs font-medium tracking-wide uppercase">Vehicle VIN</p>
+                                    {vehicleVin.trim() ? (
+                                        <p className="mt-2 font-mono text-sm">{vehicleVin.trim().toUpperCase()}</p>
+                                    ) : (
+                                        <Button
+                                            type="button"
+                                            variant="link"
+                                            className="mt-2 h-auto p-0 font-mono text-sm"
+                                            onClick={() => vinInputRef.current?.focus()}
+                                        >
+                                            Enter a VIN to preview
+                                        </Button>
                                     )}
                                 </div>
                             </div>

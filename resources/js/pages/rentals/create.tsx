@@ -44,6 +44,19 @@ function rentalDayCount(startDate: string, endDate: string) {
     return end > start ? Math.round((end - start) / 86_400_000) : 0;
 }
 
+function getTodayDate() {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function getNextDate(date: string) {
+    const nextDate = new Date(`${date}T00:00:00Z`);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    return nextDate.toISOString().slice(0, 10);
+}
+
 export default function CreateRental({ customers, fleetCars }: { customers: CustomerOption[]; fleetCars: FleetCarOption[] }) {
     const [customerId, setCustomerId] = useState('');
     const [fleetCarId, setFleetCarId] = useState('');
@@ -61,6 +74,7 @@ export default function CreateRental({ customers, fleetCars }: { customers: Cust
     const parsedInsuranceFee = Number(insuranceFee);
     const totalEstimate = dailyRate * totalDays + (Number.isFinite(parsedInsuranceFee) ? parsedInsuranceFee : 0);
     const hasOptions = customers.length > 0 && fleetCars.length > 0;
+    const today = getTodayDate();
 
     async function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -256,8 +270,12 @@ export default function CreateRental({ customers, fleetCars }: { customers: Cust
                                         <Input
                                             id="rental_start_date"
                                             type="date"
+                                            min={today}
                                             value={rentalStartDate}
-                                            onChange={(event) => setRentalStartDate(event.target.value)}
+                                            onChange={(event) => {
+                                                setRentalStartDate(event.target.value);
+                                                if (rentalEndDate && event.target.value >= rentalEndDate) setRentalEndDate('');
+                                            }}
                                             aria-invalid={Boolean(errors.rental_start_date)}
                                             aria-describedby={errors.rental_start_date ? 'rental_start_date-error' : undefined}
                                             required
@@ -269,7 +287,7 @@ export default function CreateRental({ customers, fleetCars }: { customers: Cust
                                         <Input
                                             id="rental_end_date"
                                             type="date"
-                                            min={rentalStartDate || undefined}
+                                            min={rentalStartDate ? getNextDate(rentalStartDate) : today}
                                             value={rentalEndDate}
                                             onChange={(event) => setRentalEndDate(event.target.value)}
                                             aria-invalid={Boolean(errors.rental_end_date)}

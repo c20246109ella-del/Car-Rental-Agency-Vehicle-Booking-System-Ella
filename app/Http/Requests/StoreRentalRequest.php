@@ -29,11 +29,13 @@ class StoreRentalRequest extends FormRequest
             'rental_start_date' => [
                 'required',
                 'date',
+                'after_or_equal:today',
             ],
 
             'rental_end_date' => [
                 'required',
                 'date',
+                'after_or_equal:today',
                 'after:rental_start_date',
             ],
 
@@ -54,6 +56,8 @@ class StoreRentalRequest extends FormRequest
             'fleet_car_id.required' => 'Please select a vehicle.',
             'fleet_car_id.exists' => 'The selected vehicle does not exist.',
             'rental_start_date.required' => 'The rental start date is required.',
+            'rental_start_date.after_or_equal' => 'The rental start date cannot be in the past.',
+            'rental_end_date.after_or_equal' => 'The rental end date cannot be in the past.',
             'rental_end_date.after' => 'The end date must be after the start date.',
             'insurance_fee.min' => 'The insurance fee cannot be negative.',
             'insurance_fee.decimal' => 'The insurance fee must have at most two decimal places.',

@@ -4,6 +4,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\FleetCarController;
 use App\Http\Controllers\RentalController;
+use App\Models\FleetCar;
+use App\Models\Rental;
 use Inertia\Inertia;
 
 Route::get('/', function () {
@@ -12,7 +14,49 @@ Route::get('/', function () {
 
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
+        $today = now()->toDateString();
+
+        $recentRentals = Rental::with([
+            'customer:id,customer_name',
+            'fleetCar:id,vehicle_vin,car_model_id',
+            'fleetCar.carModel:id,model_name',
+        ])
+            ->latest()
+            ->take(5)
+            ->get()
+            ->map(static function (Rental $rental) use ($today): array {
+                $startDate = $rental->rental_start_date->toDateString();
+                $endDate = $rental->rental_end_date->toDateString();
+
+                return [
+                    'id' => $rental->id,
+                    'customerId' => $rental->customer_id,
+                    'customerName' => $rental->customer->customer_name,
+                    'fleetCarId' => $rental->fleet_car_id,
+                    'carModel' => $rental->fleetCar->carModel->model_name,
+                    'vehicleVin' => $rental->fleetCar->vehicle_vin,
+                    'startDate' => $startDate,
+                    'endDate' => $endDate,
+                    'insuranceFee' => $rental->insurance_fee,
+                    'totalCost' => $rental->total_rental_cost,
+                    'status' => $today < $startDate ? 'Upcoming' : ($today < $endDate ? 'Active' : 'Completed'),
+                ];
+            });
+
+        $fleetCars = FleetCar::with('carModel:id,model_name')
+            ->orderBy('vehicle_vin')
+            ->get(['id', 'vehicle_vin', 'car_model_id'])
+            ->map(static fn ($fleetCar): array => [
+                'id' => $fleetCar->id,
+                'vehicleVin' => $fleetCar->vehicle_vin,
+                'carModel' => $fleetCar->carModel->model_name,
+            ]);
+
+        return Inertia::render('dashboard', [
+            'recentRentals' => $recentRentals,
+            'fleetCars' => $fleetCars,
+            'today' => $today,
+        ]);
     })->name('dashboard');
 });
 
