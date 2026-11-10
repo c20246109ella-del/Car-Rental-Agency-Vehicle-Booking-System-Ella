@@ -38,6 +38,17 @@ type FleetCarOption = {
     id: number;
     vehicleVin: string;
     carModel: string;
+    carModelId: number;
+};
+
+type CarModelOption = {
+    id: number;
+    modelName: string;
+};
+
+type FleetCarEditForm = {
+    vehicleVin: string;
+    carModelId: string;
 };
 
 type RentalEditForm = {
@@ -60,10 +71,12 @@ function nextDate(date: string) {
 export default function Dashboard({
     recentRentals,
     fleetCars,
+    carModels,
     today,
 }: {
     recentRentals: RecentRental[];
     fleetCars: FleetCarOption[];
+    carModels: CarModelOption[];
     today: string;
 }) {
     const [editingRental, setEditingRental] = useState<RecentRental | null>(null);
@@ -71,6 +84,11 @@ export default function Dashboard({
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState('');
     const [processing, setProcessing] = useState(false);
+    const [editingFleetCar, setEditingFleetCar] = useState<FleetCarOption | null>(null);
+    const [fleetCarForm, setFleetCarForm] = useState<FleetCarEditForm>({ vehicleVin: '', carModelId: '' });
+    const [fleetCarErrors, setFleetCarErrors] = useState<Record<string, string>>({});
+    const [fleetCarFormError, setFleetCarFormError] = useState('');
+    const [fleetCarProcessing, setFleetCarProcessing] = useState(false);
 
     function openEditor(rental: RecentRental) {
         setEditingRental(rental);
@@ -128,6 +146,43 @@ export default function Dashboard({
             }
         } finally {
             setProcessing(false);
+        }
+    }
+
+    function openFleetCarEditor(fleetCar: FleetCarOption) {
+        setEditingFleetCar(fleetCar);
+        setFleetCarForm({ vehicleVin: fleetCar.vehicleVin, carModelId: String(fleetCar.carModelId) });
+        setFleetCarErrors({});
+        setFleetCarFormError('');
+    }
+
+    async function saveFleetCar(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (!editingFleetCar) return;
+
+        setFleetCarErrors({});
+        setFleetCarFormError('');
+        setFleetCarProcessing(true);
+        try {
+            await submitJsonForm(
+                route('fleet-cars.update', editingFleetCar.id),
+                {
+                    vehicle_vin: fleetCarForm.vehicleVin.trim(),
+                    car_model_id: fleetCarForm.carModelId,
+                },
+                'PUT',
+            );
+            setEditingFleetCar(null);
+            router.reload({ only: ['fleetCars'] });
+        } catch (error) {
+            if (error instanceof ApiFormError) {
+                setFleetCarErrors(error.errors);
+                setFleetCarFormError(Object.keys(error.errors).length === 0 ? error.message : '');
+            } else {
+                setFleetCarFormError(error instanceof Error ? error.message : 'Unable to save the vehicle. Please try again.');
+            }
+        } finally {
+            setFleetCarProcessing(false);
         }
     }
 
@@ -198,6 +253,41 @@ export default function Dashboard({
                         )}
                     </CardContent>
                 </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-lg">Fleet vehicles</CardTitle>
+                        <CardDescription>Update a vehicle’s VIN or assigned model.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {fleetCars.length > 0 ? (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Vehicle</TableHead>
+                                        <TableHead>VIN</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {fleetCars.map((fleetCar) => (
+                                        <TableRow key={fleetCar.id}>
+                                            <TableCell className="font-medium">{fleetCar.carModel}</TableCell>
+                                            <TableCell className="font-mono text-sm">{fleetCar.vehicleVin}</TableCell>
+                                            <TableCell className="text-right">
+                                                <Button variant="ghost" size="sm" onClick={() => openFleetCarEditor(fleetCar)}>
+                                                    Edit
+                                                    <span className="sr-only"> vehicle {fleetCar.vehicleVin}</span>
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        ) : (
+                            <p className="text-muted-foreground py-8 text-center text-sm">No vehicles have been added yet.</p>
+                        )}
+                    </CardContent>
+                </Card>
             </main>
             <Dialog open={editingRental !== null} onOpenChange={(open) => !open && setEditingRental(null)}>
                 <DialogContent>
@@ -260,6 +350,62 @@ export default function Dashboard({
                                 </Button>
                                 <Button type="submit" disabled={processing}>
                                     {processing ? 'Saving…' : 'Save changes'}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    )}
+                </DialogContent>
+            </Dialog>
+            <Dialog open={editingFleetCar !== null} onOpenChange={(open) => !open && setEditingFleetCar(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit fleet vehicle</DialogTitle>
+                        <DialogDescription>Update the vehicle identification number or assigned car model.</DialogDescription>
+                    </DialogHeader>
+                    {editingFleetCar && (
+                        <form onSubmit={saveFleetCar} noValidate className="space-y-4">
+                            {fleetCarFormError && (
+                                <p role="alert" className="text-destructive text-sm">
+                                    {fleetCarFormError}
+                                </p>
+                            )}
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-vehicle-vin">Vehicle identification number (VIN)</Label>
+                                <Input
+                                    id="edit-vehicle-vin"
+                                    value={fleetCarForm.vehicleVin}
+                                    onChange={(event) => setFleetCarForm((current) => ({ ...current, vehicleVin: event.target.value }))}
+                                    maxLength={50}
+                                    required
+                                    aria-invalid={Boolean(fleetCarErrors.vehicle_vin)}
+                                />
+                                <InputError message={fleetCarErrors.vehicle_vin} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-car-model">Car model</Label>
+                                <Select
+                                    value={fleetCarForm.carModelId}
+                                    onValueChange={(carModelId) => setFleetCarForm((current) => ({ ...current, carModelId }))}
+                                >
+                                    <SelectTrigger id="edit-car-model" aria-invalid={Boolean(fleetCarErrors.car_model_id)}>
+                                        <SelectValue placeholder="Choose a model" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {carModels.map((carModel) => (
+                                            <SelectItem key={carModel.id} value={String(carModel.id)}>
+                                                {carModel.modelName}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <InputError message={fleetCarErrors.car_model_id} />
+                            </div>
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setEditingFleetCar(null)} disabled={fleetCarProcessing}>
+                                    Cancel
+                                </Button>
+                                <Button type="submit" disabled={fleetCarProcessing || carModels.length === 0}>
+                                    {fleetCarProcessing ? 'Saving…' : 'Save changes'}
                                 </Button>
                             </DialogFooter>
                         </form>

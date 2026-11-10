@@ -61,6 +61,35 @@ class CarRentalWorkflowTest extends TestCase
             ->assertJsonValidationErrors('vehicle_vin');
     }
 
+    public function test_fleet_cars_can_be_updated(): void
+    {
+        $originalModel = CarModel::create([
+            'model_name' => 'Sedan',
+            'daily_rate' => 80.25,
+        ]);
+        $updatedModel = CarModel::create([
+            'model_name' => 'SUV',
+            'daily_rate' => 100,
+        ]);
+        $fleetCar = FleetCar::create([
+            'vehicle_vin' => 'VIN-OLD',
+            'car_model_id' => $originalModel->id,
+        ]);
+
+        $this->putJson("/fleet-cars/{$fleetCar->id}", [
+            'vehicle_vin' => ' vin-new ',
+            'car_model_id' => $updatedModel->id,
+        ])->assertOk()
+            ->assertJsonPath('data.vehicle_vin', 'VIN-NEW')
+            ->assertJsonPath('data.car_model_id', $updatedModel->id);
+
+        $this->assertDatabaseHas('fleet_cars', [
+            'id' => $fleetCar->id,
+            'vehicle_vin' => 'VIN-NEW',
+            'car_model_id' => $updatedModel->id,
+        ]);
+    }
+
     public function test_rental_totals_are_calculated_and_overlapping_bookings_are_rejected(): void
     {
         $customer = Customer::create([

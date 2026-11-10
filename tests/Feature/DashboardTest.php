@@ -58,6 +58,11 @@ class DashboardTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('dashboard')
                 ->has('recentRentals', 1)
+                ->has('fleetCars', 1)
+                ->where('fleetCars.0.vehicleVin', 'VIN-123')
+                ->where('fleetCars.0.carModelId', $carModel->id)
+                ->has('carModels', 1)
+                ->where('carModels.0.modelName', 'Sedan')
                 ->where('recentRentals.0.customerName', 'Taylor Driver')
                 ->where('recentRentals.0.carModel', 'Sedan')
                 ->where('recentRentals.0.status', 'Active'));

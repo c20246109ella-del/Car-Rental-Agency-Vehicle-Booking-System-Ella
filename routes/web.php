@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\FleetCarController;
 use App\Http\Controllers\RentalController;
+use App\Models\CarModel;
 use App\Models\FleetCar;
 use App\Models\Rental;
 use Inertia\Inertia;
@@ -50,11 +51,18 @@ Route::middleware(['auth'])->group(function () {
                 'id' => $fleetCar->id,
                 'vehicleVin' => $fleetCar->vehicle_vin,
                 'carModel' => $fleetCar->carModel->model_name,
+                'carModelId' => $fleetCar->car_model_id,
             ]);
 
         return Inertia::render('dashboard', [
             'recentRentals' => $recentRentals,
             'fleetCars' => $fleetCars,
+            'carModels' => CarModel::orderBy('model_name')
+                ->get(['id', 'model_name'])
+                ->map(static fn (CarModel $carModel): array => [
+                    'id' => $carModel->id,
+                    'modelName' => $carModel->model_name,
+                ]),
             'today' => $today,
         ]);
     })->name('dashboard');
