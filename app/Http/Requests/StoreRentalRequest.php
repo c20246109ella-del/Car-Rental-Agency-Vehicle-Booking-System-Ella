@@ -37,6 +37,20 @@ class StoreRentalRequest extends FormRequest
                 'date',
                 'after_or_equal:today',
                 'after:rental_start_date',
+                function ($attribute, $value, $fail) {
+                    $startValue = $this->input('rental_start_date');
+
+                    if (! is_string($startValue) || ! is_string($value)) {
+                        return;
+                    }
+
+                    $startDate = strtotime($startValue);
+                    $endDate = strtotime($value);
+
+                    if ($startDate !== false && $endDate !== false && $endDate > strtotime('+14 days', $startDate)) {
+                        $fail('The rental period cannot exceed 14 days.');
+                    }
+                },
             ],
 
             'insurance_fee' => [

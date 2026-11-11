@@ -84,6 +84,32 @@ class CarRentalService
         });
     }
 
+    public function updateCarModel(int $id, array $data): CarModel
+    {
+        return DB::transaction(function () use ($id, $data) {
+            $carModel = CarModel::query()
+                ->lockForUpdate()
+                ->findOrFail($id);
+
+            $carModel->update([
+                'model_name' => self::cleanString($data['model_name']),
+                'daily_rate' => $data['daily_rate'],
+            ]);
+
+            return $carModel->fresh();
+        });
+    }
+
+    public function createCarModel(array $data): CarModel
+    {
+        return DB::transaction(function () use ($data) {
+            return CarModel::create([
+                'model_name' => self::cleanString($data['model_name']),
+                'daily_rate' => $data['daily_rate'],
+            ]);
+        });
+    }
+
     /*
     |--------------------------------------------------------------------------
     | Calculate rental days

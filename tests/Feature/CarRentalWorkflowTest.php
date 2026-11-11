@@ -91,6 +91,54 @@ class CarRentalWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_car_models_can_be_updated_with_validated_details(): void
+    {
+        $carModel = CarModel::create([
+            'model_name' => 'Sedan',
+            'daily_rate' => 80.25,
+        ]);
+
+        $this->putJson("/car-models/{$carModel->id}", [
+            'model_name' => '  Premium Sedan  ',
+            'daily_rate' => '95.50',
+        ])->assertOk()
+            ->assertJsonPath('data.model_name', 'Premium Sedan')
+            ->assertJsonPath('data.daily_rate', '95.50');
+
+        $this->assertDatabaseHas('car_models', [
+            'id' => $carModel->id,
+            'model_name' => 'Premium Sedan',
+            'daily_rate' => '95.50',
+        ]);
+
+        $this->putJson("/car-models/{$carModel->id}", [
+            'model_name' => '',
+            'daily_rate' => '95.501',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['model_name', 'daily_rate']);
+    }
+
+    public function test_car_models_can_be_created_with_validated_details(): void
+    {
+        $this->postJson('/car-models', [
+            'model_name' => '  Compact Sedan  ',
+            'daily_rate' => '69.99',
+        ])->assertCreated()
+            ->assertJsonPath('data.model_name', 'Compact Sedan')
+            ->assertJsonPath('data.daily_rate', '69.99');
+
+        $this->assertDatabaseHas('car_models', [
+            'model_name' => 'Compact Sedan',
+            'daily_rate' => '69.99',
+        ]);
+
+        $this->postJson('/car-models', [
+            'model_name' => '',
+            'daily_rate' => '-1',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['model_name', 'daily_rate']);
+    }
+
     public function test_fleet_car_creation_page_lists_existing_vehicles_for_editing(): void
     {
         $carModel = CarModel::create([
@@ -185,6 +233,88 @@ class CarRentalWorkflowTest extends TestCase
             ->assertJsonValidationErrors('rental_end_date');
     }
 
+    public function test_rental_period_cannot_exceed_fourteen_days(): void
+    {
+        $customer = Customer::create([
+            'driver_license' => 'DL-LIMIT',
+            'customer_name' => 'Taylor Driver',
+            'customer_phone' => '555-0100',
+        ]);
+        $carModel = CarModel::create([
+            'model_name' => 'Sedan',
+            'daily_rate' => 80.25,
+        ]);
+        $fleetCar = FleetCar::create([
+            'vehicle_vin' => 'VIN-LIMIT',
+            'car_model_id' => $carModel->id,
+        ]);
+        $startDate = now()->addDay();
+
+        $this->postJson('/rentals', [
+            'customer_id' => $customer->id,
+            'fleet_car_id' => $fleetCar->id,
+            'rental_start_date' => $startDate->toDateString(),
+            'rental_end_date' => $startDate->copy()->addDays(15)->toDateString(),
+            'insurance_fee' => '0',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('rental_end_date');
+
+        $this->postJson('/rentals', [
+            'customer_id' => $customer->id,
+            'fleet_car_id' => $fleetCar->id,
+            'rental_start_date' => $startDate->toDateString(),
+            'rental_end_date' => $startDate->copy()->addDays(14)->toDateString(),
+            'insurance_fee' => '0',
+        ])->assertCreated()
+            ->assertJsonPath('data.total_days', 14);
+    }
+
+    public function test_rental_updates_cannot_exceed_fourteen_days(): void
+    {
+        $customer = Customer::create([
+            'driver_license' => 'DL-UPDATE-LIMIT',
+            'customer_name' => 'Taylor Driver',
+            'customer_phone' => '555-0100',
+        ]);
+        $carModel = CarModel::create([
+            'model_name' => 'Sedan',
+            'daily_rate' => 80.25,
+        ]);
+        $fleetCar = FleetCar::create([
+            'vehicle_vin' => 'VIN-UPDATE-LIMIT',
+            'car_model_id' => $carModel->id,
+        ]);
+        $rental = Rental::create([
+            'customer_id' => $customer->id,
+            'fleet_car_id' => $fleetCar->id,
+            'rental_start_date' => now()->addDays(20)->toDateString(),
+            'rental_end_date' => now()->addDays(21)->toDateString(),
+            'total_days' => 1,
+            'daily_rate' => 80.25,
+            'insurance_fee' => 0,
+            'total_rental_cost' => 80.25,
+        ]);
+        $startDate = now()->addDay();
+
+        $this->putJson("/rentals/{$rental->id}", [
+            'customer_id' => $customer->id,
+            'fleet_car_id' => $fleetCar->id,
+            'rental_start_date' => $startDate->toDateString(),
+            'rental_end_date' => $startDate->copy()->addDays(15)->toDateString(),
+            'insurance_fee' => '0',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('rental_end_date');
+
+        $this->putJson("/rentals/{$rental->id}", [
+            'customer_id' => $customer->id,
+            'fleet_car_id' => $fleetCar->id,
+            'rental_start_date' => $startDate->toDateString(),
+            'rental_end_date' => $startDate->copy()->addDays(14)->toDateString(),
+            'insurance_fee' => '0',
+        ])->assertOk()
+            ->assertJsonPath('data.total_days', 14);
+    }
+
     public function test_rental_updates_reject_changed_dates_in_the_past(): void
     {
         $customer = Customer::create([
@@ -225,6 +355,11 @@ class CarRentalWorkflowTest extends TestCase
     {
         $this->get('/fleet-cars/create')->assertOk();
         $this->get('/customers/create')->assertOk();
-        $this->get('/rentals/create')->assertOk();
+        $this->get('/rentals/create')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('rentals/create')
+                ->has('fleetCars')
+                ->has('carModels'));
     }
 }

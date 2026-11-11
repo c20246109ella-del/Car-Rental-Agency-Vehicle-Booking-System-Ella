@@ -1,5 +1,6 @@
-type ApiResponse = {
+type ApiResponse<TData = unknown> = {
     message?: string;
+    data?: TData;
     errors?: Record<string, string | string[]>;
 };
 
@@ -13,7 +14,11 @@ export class ApiFormError extends Error {
     }
 }
 
-export async function submitJsonForm(url: string, data: Record<string, string>, method: 'POST' | 'PUT' = 'POST'): Promise<ApiResponse> {
+export async function submitJsonForm<TData = unknown>(
+    url: string,
+    data: Record<string, string>,
+    method: 'POST' | 'PUT' = 'POST',
+): Promise<ApiResponse<TData>> {
     const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
 
     if (!csrfToken) {
@@ -30,10 +35,10 @@ export async function submitJsonForm(url: string, data: Record<string, string>, 
         body: JSON.stringify(data),
     });
 
-    let payload: ApiResponse;
+    let payload: ApiResponse<TData>;
 
     try {
-        payload = (await response.json()) as ApiResponse;
+        payload = (await response.json()) as ApiResponse<TData>;
     } catch {
         throw new Error('The server returned an unexpected response. Please try again.');
     }

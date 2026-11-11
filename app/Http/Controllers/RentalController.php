@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreRentalRequest;
 use App\Http\Requests\UpdateRentalRequest;
 use App\Models\Customer;
+use App\Models\CarModel;
 use App\Models\FleetCar;
 use App\Models\Rental;
 use App\Services\CarRentalService;
@@ -50,6 +51,7 @@ class RentalController extends Controller
     public function create(Request $request): JsonResponse|Response
     {
         $customers = Customer::orderBy('customer_name')->get();
+        $carModels = CarModel::orderBy('model_name')->get(['id', 'model_name', 'daily_rate']);
         $fleetCars = FleetCar::with('carModel')
             ->orderBy('vehicle_vin')
             ->get();
@@ -58,12 +60,14 @@ class RentalController extends Controller
             return response()->json([
                 'customers' => $customers,
                 'fleet_cars' => $fleetCars,
+                'car_models' => $carModels,
             ]);
         }
 
         return Inertia::render('rentals/create', [
             'customers' => $customers,
             'fleetCars' => $fleetCars,
+            'carModels' => $carModels,
         ]);
     }
 

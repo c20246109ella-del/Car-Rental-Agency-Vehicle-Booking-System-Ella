@@ -34,6 +34,11 @@ type FleetCarEditForm = {
     carModelId: string;
 };
 
+type CarModelEditForm = {
+    modelName: string;
+    dailyRate: string;
+};
+
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Fleet cars', href: '/fleet-cars' },
     { title: 'Add vehicle', href: '/fleet-cars/create' },
@@ -55,6 +60,16 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
     const [editErrors, setEditErrors] = useState<Record<string, string>>({});
     const [editFormError, setEditFormError] = useState('');
     const [editProcessing, setEditProcessing] = useState(false);
+    const [editingCarModel, setEditingCarModel] = useState<CarModelOption | null>(null);
+    const [carModelForm, setCarModelForm] = useState<CarModelEditForm>({ modelName: '', dailyRate: '' });
+    const [carModelErrors, setCarModelErrors] = useState<Record<string, string>>({});
+    const [carModelFormError, setCarModelFormError] = useState('');
+    const [carModelProcessing, setCarModelProcessing] = useState(false);
+    const [addingCarModel, setAddingCarModel] = useState(false);
+    const [newCarModelForm, setNewCarModelForm] = useState<CarModelEditForm>({ modelName: '', dailyRate: '' });
+    const [newCarModelErrors, setNewCarModelErrors] = useState<Record<string, string>>({});
+    const [newCarModelFormError, setNewCarModelFormError] = useState('');
+    const [newCarModelProcessing, setNewCarModelProcessing] = useState(false);
 
     const selectedModel = carModels.find((model) => String(model.id) === carModelId);
 
@@ -126,6 +141,72 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
         }
     }
 
+    function openCarModelEditor(carModel: CarModelOption) {
+        setEditingCarModel(carModel);
+        setCarModelForm({ modelName: carModel.model_name, dailyRate: carModel.daily_rate });
+        setCarModelErrors({});
+        setCarModelFormError('');
+    }
+
+    async function saveCarModel(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (!editingCarModel) return;
+
+        setCarModelErrors({});
+        setCarModelFormError('');
+        setCarModelProcessing(true);
+        try {
+            const result = await submitJsonForm(
+                route('car-models.update', editingCarModel.id),
+                {
+                    model_name: carModelForm.modelName.trim(),
+                    daily_rate: carModelForm.dailyRate,
+                },
+                'PUT',
+            );
+            setSuccessTitle('Car model updated');
+            setSuccess(result.message ?? 'Car model updated successfully.');
+            setEditingCarModel(null);
+            router.reload({ only: ['carModels', 'fleetCars'] });
+        } catch (error) {
+            if (error instanceof ApiFormError) {
+                setCarModelErrors(error.errors);
+                setCarModelFormError(Object.keys(error.errors).length === 0 ? error.message : '');
+            } else {
+                setCarModelFormError(error instanceof Error ? error.message : 'Unable to save the car model. Please try again.');
+            }
+        } finally {
+            setCarModelProcessing(false);
+        }
+    }
+
+    async function createCarModel(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setNewCarModelErrors({});
+        setNewCarModelFormError('');
+        setNewCarModelProcessing(true);
+        try {
+            const result = await submitJsonForm(route('car-models.store'), {
+                model_name: newCarModelForm.modelName.trim(),
+                daily_rate: newCarModelForm.dailyRate,
+            });
+            setSuccessTitle('Car model added');
+            setSuccess(result.message ?? 'Car model created successfully.');
+            setNewCarModelForm({ modelName: '', dailyRate: '' });
+            setAddingCarModel(false);
+            router.reload({ only: ['carModels'] });
+        } catch (error) {
+            if (error instanceof ApiFormError) {
+                setNewCarModelErrors(error.errors);
+                setNewCarModelFormError(Object.keys(error.errors).length === 0 ? error.message : '');
+            } else {
+                setNewCarModelFormError(error instanceof Error ? error.message : 'Unable to add the car model. Please try again.');
+            }
+        } finally {
+            setNewCarModelProcessing(false);
+        }
+    }
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Add fleet car" />
@@ -185,7 +266,15 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
                                     <CircleHelp className="size-4" />
                                     <AlertTitle>No car models available</AlertTitle>
                                     <AlertDescription>
-                                        Add a car model before registering a fleet vehicle. Once a model is available, you can select it here.
+                                        <div className="space-y-3">
+                                            <p>
+                                                Add a car model before registering a fleet vehicle. Once it’s added, select it from the Car model list
+                                                below.
+                                            </p>
+                                            <Button type="button" size="sm" onClick={() => setAddingCarModel(true)}>
+                                                Add car model
+                                            </Button>
+                                        </div>
                                     </AlertDescription>
                                 </Alert>
                             ) : (
@@ -325,6 +414,55 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
                         )}
                     </CardContent>
                 </Card>
+                <Card className="border-border/80 shadow-sm">
+                    <CardHeader>
+                        <CardTitle className="text-lg">Car models</CardTitle>
+                        <CardDescription>Edit a model’s name or daily rental rate.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {carModels.length > 0 ? (
+                            <div className="space-y-4">
+                                <div className="flex justify-end">
+                                    <Button type="button" onClick={() => setAddingCarModel(true)}>
+                                        Add car model
+                                    </Button>
+                                </div>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Model</TableHead>
+                                            <TableHead>Daily rate</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {carModels.map((carModel) => (
+                                            <TableRow key={carModel.id}>
+                                                <TableCell className="font-medium">{carModel.model_name}</TableCell>
+                                                <TableCell>{formatCurrency(carModel.daily_rate)}</TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button variant="ghost" size="sm" onClick={() => openCarModelEditor(carModel)}>
+                                                        Edit
+                                                        <span className="sr-only"> model {carModel.model_name}</span>
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center gap-3 py-8 text-center">
+                                <p className="text-muted-foreground text-sm">
+                                    Add a car model before registering a fleet vehicle. Once a model is available, you can select it here.
+                                </p>
+                                <Button type="button" onClick={() => setAddingCarModel(true)}>
+                                    Add car model
+                                </Button>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
             </main>
             <Dialog open={editingFleetCar !== null} onOpenChange={(open) => !open && setEditingFleetCar(null)}>
                 <DialogContent>
@@ -380,6 +518,106 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
                             </DialogFooter>
                         </form>
                     )}
+                </DialogContent>
+            </Dialog>
+            <Dialog open={editingCarModel !== null} onOpenChange={(open) => !open && setEditingCarModel(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit car model</DialogTitle>
+                        <DialogDescription>Update the model name or daily rental rate.</DialogDescription>
+                    </DialogHeader>
+                    {editingCarModel && (
+                        <form onSubmit={saveCarModel} noValidate className="space-y-4">
+                            {carModelFormError && (
+                                <p role="alert" className="text-destructive text-sm">
+                                    {carModelFormError}
+                                </p>
+                            )}
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-model-name">Model name</Label>
+                                <Input
+                                    id="edit-model-name"
+                                    value={carModelForm.modelName}
+                                    onChange={(event) => setCarModelForm((current) => ({ ...current, modelName: event.target.value }))}
+                                    maxLength={100}
+                                    required
+                                    aria-invalid={Boolean(carModelErrors.model_name)}
+                                />
+                                <InputError message={carModelErrors.model_name} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-daily-rate">Daily rate</Label>
+                                <Input
+                                    id="edit-daily-rate"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={carModelForm.dailyRate}
+                                    onChange={(event) => setCarModelForm((current) => ({ ...current, dailyRate: event.target.value }))}
+                                    required
+                                    aria-invalid={Boolean(carModelErrors.daily_rate)}
+                                />
+                                <InputError message={carModelErrors.daily_rate} />
+                            </div>
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setEditingCarModel(null)} disabled={carModelProcessing}>
+                                    Cancel
+                                </Button>
+                                <Button type="submit" disabled={carModelProcessing}>
+                                    {carModelProcessing ? 'Saving…' : 'Save changes'}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    )}
+                </DialogContent>
+            </Dialog>
+            <Dialog open={addingCarModel} onOpenChange={setAddingCarModel}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Add car model</DialogTitle>
+                        <DialogDescription>Create a model and set its daily rental rate before adding a fleet vehicle.</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={createCarModel} noValidate className="space-y-4">
+                        {newCarModelFormError && (
+                            <p role="alert" className="text-destructive text-sm">
+                                {newCarModelFormError}
+                            </p>
+                        )}
+                        <div className="space-y-2">
+                            <Label htmlFor="new-model-name">Model name</Label>
+                            <Input
+                                id="new-model-name"
+                                value={newCarModelForm.modelName}
+                                onChange={(event) => setNewCarModelForm((current) => ({ ...current, modelName: event.target.value }))}
+                                maxLength={100}
+                                required
+                                aria-invalid={Boolean(newCarModelErrors.model_name)}
+                            />
+                            <InputError message={newCarModelErrors.model_name} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="new-daily-rate">Daily rate</Label>
+                            <Input
+                                id="new-daily-rate"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={newCarModelForm.dailyRate}
+                                onChange={(event) => setNewCarModelForm((current) => ({ ...current, dailyRate: event.target.value }))}
+                                required
+                                aria-invalid={Boolean(newCarModelErrors.daily_rate)}
+                            />
+                            <InputError message={newCarModelErrors.daily_rate} />
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setAddingCarModel(false)} disabled={newCarModelProcessing}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={newCarModelProcessing}>
+                                {newCarModelProcessing ? 'Saving…' : 'Add model'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
         </AppLayout>

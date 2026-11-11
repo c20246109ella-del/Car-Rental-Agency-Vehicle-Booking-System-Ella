@@ -7,6 +7,7 @@ import InputError from '@/components/input-error';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -21,6 +22,21 @@ type CustomerOption = {
 };
 
 type FleetCarOption = {
+    id: number;
+    vehicle_vin: string;
+    car_model: {
+        model_name: string;
+        daily_rate: string;
+    };
+};
+
+type CarModelOption = {
+    id: number;
+    model_name: string;
+    daily_rate: string;
+};
+
+type CreatedFleetCar = {
     id: number;
     vehicle_vin: string;
     car_model: {
@@ -57,9 +73,28 @@ function getNextDate(date: string) {
     return nextDate.toISOString().slice(0, 10);
 }
 
-export default function CreateRental({ customers, fleetCars }: { customers: CustomerOption[]; fleetCars: FleetCarOption[] }) {
+function addDays(date: string, days: number) {
+    const result = new Date(`${date}T00:00:00Z`);
+    result.setUTCDate(result.getUTCDate() + days);
+    return result.toISOString().slice(0, 10);
+}
+
+function getLatestReturnDate(date: string) {
+    return addDays(date, 14);
+}
+
+export default function CreateRental({
+    customers,
+    fleetCars,
+    carModels,
+}: {
+    customers: CustomerOption[];
+    fleetCars: FleetCarOption[];
+    carModels: CarModelOption[];
+}) {
     const [customerId, setCustomerId] = useState('');
     const [fleetCarId, setFleetCarId] = useState('');
+    const [createdFleetCars, setCreatedFleetCars] = useState<FleetCarOption[]>([]);
     const [rentalStartDate, setRentalStartDate] = useState('');
     const [rentalEndDate, setRentalEndDate] = useState('');
     const [insuranceFee, setInsuranceFee] = useState('0');
@@ -67,13 +102,20 @@ export default function CreateRental({ customers, fleetCars }: { customers: Cust
     const [processing, setProcessing] = useState(false);
     const [success, setSuccess] = useState('');
     const [formError, setFormError] = useState('');
+    const [addingFleetCar, setAddingFleetCar] = useState(false);
+    const [newFleetCarVin, setNewFleetCarVin] = useState('');
+    const [newFleetCarModelId, setNewFleetCarModelId] = useState('');
+    const [newFleetCarErrors, setNewFleetCarErrors] = useState<Record<string, string>>({});
+    const [newFleetCarError, setNewFleetCarError] = useState('');
+    const [newFleetCarProcessing, setNewFleetCarProcessing] = useState(false);
 
-    const selectedCar = fleetCars.find((car) => String(car.id) === fleetCarId);
+    const availableFleetCars = [...fleetCars, ...createdFleetCars];
+    const selectedCar = availableFleetCars.find((car) => String(car.id) === fleetCarId);
     const totalDays = rentalDayCount(rentalStartDate, rentalEndDate);
     const dailyRate = Number(selectedCar?.car_model.daily_rate ?? 0);
     const parsedInsuranceFee = Number(insuranceFee);
     const totalEstimate = dailyRate * totalDays + (Number.isFinite(parsedInsuranceFee) ? parsedInsuranceFee : 0);
-    const hasOptions = customers.length > 0 && fleetCars.length > 0;
+    const hasOptions = customers.length > 0 && availableFleetCars.length > 0;
     const today = getTodayDate();
 
     async function submit(event: FormEvent<HTMLFormElement>) {
@@ -106,6 +148,46 @@ export default function CreateRental({ customers, fleetCars }: { customers: Cust
             }
         } finally {
             setProcessing(false);
+        }
+    }
+
+    async function addFleetCar(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setNewFleetCarErrors({});
+        setNewFleetCarError('');
+        setNewFleetCarProcessing(true);
+
+        try {
+            const result = await submitJsonForm<CreatedFleetCar>(route('fleet-cars.store'), {
+                vehicle_vin: newFleetCarVin.trim(),
+                car_model_id: newFleetCarModelId,
+            });
+            const createdCar = result.data;
+
+            if (!createdCar) {
+                throw new Error('The server did not return the saved vehicle. Please try again.');
+            }
+
+            const fleetCar: FleetCarOption = {
+                id: createdCar.id,
+                vehicle_vin: createdCar.vehicle_vin,
+                car_model: createdCar.car_model,
+            };
+            setCreatedFleetCars((current) => [...current, fleetCar]);
+            setFleetCarId(String(fleetCar.id));
+            setNewFleetCarVin('');
+            setNewFleetCarModelId('');
+            setAddingFleetCar(false);
+            setErrors((current) => ({ ...current, fleet_car_id: '' }));
+        } catch (error) {
+            if (error instanceof ApiFormError) {
+                setNewFleetCarErrors(error.errors);
+                setNewFleetCarError(Object.keys(error.errors).length === 0 ? error.message : '');
+            } else {
+                setNewFleetCarError(error instanceof Error ? error.message : 'Unable to add the vehicle. Please try again.');
+            }
+        } finally {
+            setNewFleetCarProcessing(false);
         }
     }
 
@@ -156,17 +238,11 @@ export default function CreateRental({ customers, fleetCars }: { customers: Cust
                     </Alert>
                 )}
 
-                {!hasOptions && (
+                {customers.length === 0 && (
                     <Alert>
                         <CircleHelp className="size-4" />
                         <AlertTitle>Setup needed before booking</AlertTitle>
-                        <AlertDescription>
-                            {customers.length === 0 && fleetCars.length === 0
-                                ? 'Add a customer and at least one fleet vehicle before creating a rental.'
-                                : customers.length === 0
-                                  ? 'Add a customer before creating a rental.'
-                                  : 'Add a fleet vehicle before creating a rental.'}
-                        </AlertDescription>
+                        <AlertDescription>Add a customer before creating a rental.</AlertDescription>
                     </Alert>
                 )}
 
@@ -238,35 +314,68 @@ export default function CreateRental({ customers, fleetCars }: { customers: Cust
                             <CardContent className="space-y-5 pt-6">
                                 <div className="grid gap-2">
                                     <Label htmlFor="fleet_car_id">Fleet vehicle</Label>
-                                    <Select
-                                        value={fleetCarId}
-                                        onValueChange={(value) => {
-                                            setFleetCarId(value);
-                                            setErrors((current) => ({ ...current, fleet_car_id: '' }));
-                                        }}
-                                        disabled={fleetCars.length === 0}
-                                    >
-                                        <SelectTrigger
-                                            id="fleet_car_id"
-                                            aria-invalid={Boolean(errors.fleet_car_id)}
-                                            aria-describedby={errors.fleet_car_id ? 'fleet_car_id-error' : undefined}
+                                    {availableFleetCars.length > 0 ? (
+                                        <Select
+                                            value={fleetCarId}
+                                            onValueChange={(value) => {
+                                                setFleetCarId(value);
+                                                setErrors((current) => ({ ...current, fleet_car_id: '' }));
+                                            }}
                                         >
-                                            <SelectValue placeholder="Select a vehicle" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {fleetCars.map((car) => (
-                                                <SelectItem key={car.id} value={String(car.id)}>
-                                                    {car.car_model.model_name} · {car.vehicle_vin}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                            <SelectTrigger
+                                                id="fleet_car_id"
+                                                aria-invalid={Boolean(errors.fleet_car_id)}
+                                                aria-describedby={errors.fleet_car_id ? 'fleet_car_id-error' : undefined}
+                                            >
+                                                <SelectValue placeholder="Select a vehicle" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {availableFleetCars.map((car) => (
+                                                    <SelectItem key={car.id} value={String(car.id)}>
+                                                        {car.car_model.model_name} · {car.vehicle_vin}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed p-4 sm:flex-row sm:items-center sm:justify-between">
+                                            <p className="text-muted-foreground text-sm">
+                                                No fleet vehicles yet. Add one here to make it available for this rental.
+                                            </p>
+                                            <Button type="button" variant="outline" onClick={() => setAddingFleetCar(true)}>
+                                                Add fleet vehicle
+                                            </Button>
+                                        </div>
+                                    )}
                                     <InputError id="fleet_car_id-error" message={errors.fleet_car_id} />
                                 </div>
 
                                 <div className="grid gap-5 sm:grid-cols-2">
                                     <div className="grid gap-2">
                                         <Label htmlFor="rental_start_date">Pickup date</Label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {[
+                                                { label: 'Today', date: today },
+                                                { label: 'Tomorrow', date: addDays(today, 1) },
+                                                { label: 'Next week', date: addDays(today, 7) },
+                                            ].map(({ label, date }) => (
+                                                <Button
+                                                    key={label}
+                                                    type="button"
+                                                    size="sm"
+                                                    variant={rentalStartDate === date ? 'secondary' : 'outline'}
+                                                    onClick={() => {
+                                                        setRentalStartDate(date);
+                                                        if (rentalEndDate && (rentalEndDate <= date || rentalEndDate > getLatestReturnDate(date))) {
+                                                            setRentalEndDate('');
+                                                        }
+                                                        setErrors((current) => ({ ...current, rental_start_date: '', rental_end_date: '' }));
+                                                    }}
+                                                >
+                                                    {label}
+                                                </Button>
+                                            ))}
+                                        </div>
                                         <Input
                                             id="rental_start_date"
                                             type="date"
@@ -274,7 +383,13 @@ export default function CreateRental({ customers, fleetCars }: { customers: Cust
                                             value={rentalStartDate}
                                             onChange={(event) => {
                                                 setRentalStartDate(event.target.value);
-                                                if (rentalEndDate && event.target.value >= rentalEndDate) setRentalEndDate('');
+                                                if (
+                                                    rentalEndDate &&
+                                                    (event.target.value >= rentalEndDate || rentalEndDate > getLatestReturnDate(event.target.value))
+                                                ) {
+                                                    setRentalEndDate('');
+                                                }
+                                                setErrors((current) => ({ ...current, rental_start_date: '', rental_end_date: '' }));
                                             }}
                                             aria-invalid={Boolean(errors.rental_start_date)}
                                             aria-describedby={errors.rental_start_date ? 'rental_start_date-error' : undefined}
@@ -284,12 +399,34 @@ export default function CreateRental({ customers, fleetCars }: { customers: Cust
                                     </div>
                                     <div className="grid gap-2">
                                         <Label htmlFor="rental_end_date">Return date</Label>
+                                        {rentalStartDate && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {[1, 7, 14].map((days) => (
+                                                    <Button
+                                                        key={days}
+                                                        type="button"
+                                                        size="sm"
+                                                        variant={rentalEndDate === addDays(rentalStartDate, days) ? 'secondary' : 'outline'}
+                                                        onClick={() => {
+                                                            setRentalEndDate(addDays(rentalStartDate, days));
+                                                            setErrors((current) => ({ ...current, rental_end_date: '' }));
+                                                        }}
+                                                    >
+                                                        {days === 1 ? '1 day' : `${days} days`}
+                                                    </Button>
+                                                ))}
+                                            </div>
+                                        )}
                                         <Input
                                             id="rental_end_date"
                                             type="date"
                                             min={rentalStartDate ? getNextDate(rentalStartDate) : today}
+                                            max={rentalStartDate ? getLatestReturnDate(rentalStartDate) : undefined}
                                             value={rentalEndDate}
-                                            onChange={(event) => setRentalEndDate(event.target.value)}
+                                            onChange={(event) => {
+                                                setRentalEndDate(event.target.value);
+                                                setErrors((current) => ({ ...current, rental_end_date: '' }));
+                                            }}
                                             aria-invalid={Boolean(errors.rental_end_date)}
                                             aria-describedby={errors.rental_end_date ? 'rental_end_date-error' : undefined}
                                             required
@@ -297,7 +434,7 @@ export default function CreateRental({ customers, fleetCars }: { customers: Cust
                                         <InputError id="rental_end_date-error" message={errors.rental_end_date} />
                                     </div>
                                 </div>
-                                <p className="text-muted-foreground text-xs">The return date must be after the pickup date.</p>
+                                <p className="text-muted-foreground text-xs">The return date must be after pickup and no more than 14 days later.</p>
                             </CardContent>
                         </Card>
 
@@ -377,6 +514,72 @@ export default function CreateRental({ customers, fleetCars }: { customers: Cust
                     </aside>
                 </form>
             </main>
+            <Dialog open={addingFleetCar} onOpenChange={setAddingFleetCar}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Add fleet vehicle</DialogTitle>
+                        <DialogDescription>Add a vehicle here and it will be selected for this rental automatically.</DialogDescription>
+                    </DialogHeader>
+                    {carModels.length > 0 ? (
+                        <form onSubmit={addFleetCar} noValidate className="space-y-4">
+                            {newFleetCarError && (
+                                <p role="alert" className="text-destructive text-sm">
+                                    {newFleetCarError}
+                                </p>
+                            )}
+                            <div className="space-y-2">
+                                <Label htmlFor="new-fleet-car-vin">Vehicle identification number (VIN)</Label>
+                                <Input
+                                    id="new-fleet-car-vin"
+                                    value={newFleetCarVin}
+                                    onChange={(event) => setNewFleetCarVin(event.target.value)}
+                                    maxLength={50}
+                                    required
+                                    aria-invalid={Boolean(newFleetCarErrors.vehicle_vin)}
+                                />
+                                <InputError message={newFleetCarErrors.vehicle_vin} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="new-fleet-car-model">Car model</Label>
+                                <Select value={newFleetCarModelId} onValueChange={setNewFleetCarModelId}>
+                                    <SelectTrigger id="new-fleet-car-model" aria-invalid={Boolean(newFleetCarErrors.car_model_id)}>
+                                        <SelectValue placeholder="Choose a model" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {carModels.map((model) => (
+                                            <SelectItem key={model.id} value={String(model.id)}>
+                                                {model.model_name} · {formatCurrency(model.daily_rate)}/day
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <InputError message={newFleetCarErrors.car_model_id} />
+                            </div>
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setAddingFleetCar(false)} disabled={newFleetCarProcessing}>
+                                    Cancel
+                                </Button>
+                                <Button type="submit" disabled={newFleetCarProcessing || !newFleetCarModelId}>
+                                    {newFleetCarProcessing ? <LoaderCircle className="animate-spin" /> : null}
+                                    {newFleetCarProcessing ? 'Saving…' : 'Add and select vehicle'}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    ) : (
+                        <div className="space-y-4">
+                            <p className="text-muted-foreground text-sm">Add a car model first before registering a fleet vehicle.</p>
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setAddingFleetCar(false)}>
+                                    Cancel
+                                </Button>
+                                <Button asChild>
+                                    <Link href="/fleet-cars/create">Add car model</Link>
+                                </Button>
+                            </DialogFooter>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </AppLayout>
     );
 }

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\CarModelController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\FleetCarController;
 use App\Http\Controllers\RentalController;
@@ -89,6 +90,12 @@ Route::post('/fleet-cars', [FleetCarController::class, 'store'])
 
 Route::put('/fleet-cars/{id}', [FleetCarController::class, 'update'])
     ->name('fleet-cars.update');
+
+Route::put('/car-models/{id}', [CarModelController::class, 'update'])
+    ->name('car-models.update');
+
+Route::post('/car-models', [CarModelController::class, 'store'])
+    ->name('car-models.store');
 
 // Rental Routes
 Route::get('/rentals', [RentalController::class, 'index'])
