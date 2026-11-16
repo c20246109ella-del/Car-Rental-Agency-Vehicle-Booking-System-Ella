@@ -139,6 +139,43 @@ class CarRentalWorkflowTest extends TestCase
             ->assertJsonValidationErrors(['model_name', 'daily_rate']);
     }
 
+    public function test_car_models_can_be_listed_and_deleted(): void
+    {
+        $carModel = CarModel::create([
+            'model_name' => 'Compact Sedan',
+            'daily_rate' => 69.99,
+        ]);
+
+        $this->getJson('/car-models')
+            ->assertOk()
+            ->assertJsonFragment([
+                'id' => $carModel->id,
+                'model_name' => 'Compact Sedan',
+                'daily_rate' => '69.99',
+            ]);
+
+        $this->deleteJson("/car-models/{$carModel->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Car model deleted successfully.');
+
+        $this->assertDatabaseMissing('car_models', [
+            'id' => $carModel->id,
+        ]);
+
+        $carModelInUse = CarModel::create([
+            'model_name' => 'SUV',
+            'daily_rate' => 120,
+        ]);
+        FleetCar::create([
+            'vehicle_vin' => 'VIN-DELETE-PROTECT',
+            'car_model_id' => $carModelInUse->id,
+        ]);
+
+        $this->deleteJson("/car-models/{$carModelInUse->id}")
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'Cannot delete this car model because it is currently assigned to one or more fleet cars.');
+    }
+
     public function test_fleet_car_creation_page_lists_existing_vehicles_for_editing(): void
     {
         $carModel = CarModel::create([

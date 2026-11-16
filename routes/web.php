@@ -91,11 +91,17 @@ Route::post('/fleet-cars', [FleetCarController::class, 'store'])
 Route::put('/fleet-cars/{id}', [FleetCarController::class, 'update'])
     ->name('fleet-cars.update');
 
+Route::get('/car-models', [CarModelController::class, 'index'])
+    ->name('car-models.index');
+
 Route::put('/car-models/{id}', [CarModelController::class, 'update'])
     ->name('car-models.update');
 
 Route::post('/car-models', [CarModelController::class, 'store'])
     ->name('car-models.store');
+
+Route::delete('/car-models/{id}', [CarModelController::class, 'destroy'])
+    ->name('car-models.destroy');
 
 // Rental Routes
 Route::get('/rentals', [RentalController::class, 'index'])

@@ -14,6 +14,15 @@ class CarModelController extends Controller
         private readonly CarRentalService $carRentalService
     ) {}
 
+    public function index(): JsonResponse
+    {
+        $carModels = CarModel::query()
+            ->orderBy('model_name')
+            ->get();
+
+        return response()->json($carModels);
+    }
+
     public function store(StoreCarModelRequest $request): JsonResponse
     {
         $carModel = $this->carRentalService->createCarModel(
@@ -36,6 +45,24 @@ class CarModelController extends Controller
         return response()->json([
             'message' => 'Car model updated successfully.',
             'data' => $carModel,
+        ]);
+    }
+
+    public function destroy(int $id): JsonResponse
+    {
+        $carModel = CarModel::query()->findOrFail($id);
+
+        if ($carModel->fleetCars()->exists()) {
+            return response()->json([
+                'message' => 'Cannot delete this car model because it is currently assigned to one or more fleet cars.',
+            ], 409);
+        }
+
+        $carModel->delete();
+
+        return response()->json([
+            'message' => 'Car model deleted successfully.',
+            'data' => ['id' => $id],
         ]);
     }
 }
