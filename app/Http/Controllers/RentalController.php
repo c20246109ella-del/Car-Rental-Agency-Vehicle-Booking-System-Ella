@@ -114,4 +114,15 @@ class RentalController extends Controller
             'data' => $rental,
         ]);
     }
+
+    public function destroy(int $id): JsonResponse
+    {
+        $rental = Rental::query()->findOrFail($id);
+        $rental->delete();
+
+        return response()->json([
+            'message' => 'Rental deleted successfully.',
+            'data' => ['id' => $id],
+        ]);
+    }
 }

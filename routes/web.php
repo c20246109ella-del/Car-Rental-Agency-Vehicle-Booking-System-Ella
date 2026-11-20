@@ -115,3 +115,6 @@ Route::post('/rentals', [RentalController::class, 'store'])
 
 Route::put('/rentals/{id}', [RentalController::class, 'update'])
     ->name('rentals.update');
+
+Route::delete('/rentals/{id}', [RentalController::class, 'destroy'])
+    ->name('rentals.destroy');

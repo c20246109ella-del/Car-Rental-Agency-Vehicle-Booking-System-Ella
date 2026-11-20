@@ -17,7 +17,7 @@ export class ApiFormError extends Error {
 export async function submitJsonForm<TData = unknown>(
     url: string,
     data: Record<string, string>,
-    method: 'POST' | 'PUT' = 'POST',
+    method: 'POST' | 'PUT' | 'DELETE' = 'POST',
 ): Promise<ApiResponse<TData>> {
     const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
 

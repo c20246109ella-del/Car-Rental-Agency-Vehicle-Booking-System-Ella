@@ -6,6 +6,7 @@ use App\Models\CarModel;
 use App\Models\Customer;
 use App\Models\FleetCar;
 use App\Models\Rental;
+use App\Models\RentalPayment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -174,6 +175,47 @@ class CarRentalWorkflowTest extends TestCase
         $this->deleteJson("/car-models/{$carModelInUse->id}")
             ->assertStatus(409)
             ->assertJsonPath('message', 'Cannot delete this car model because it is currently assigned to one or more fleet cars.');
+    }
+
+    public function test_rentals_can_be_deleted_with_their_payment_records(): void
+    {
+        $customer = Customer::create([
+            'driver_license' => 'DL-DELETE',
+            'customer_name' => 'Taylor Driver',
+            'customer_phone' => '555-0100',
+        ]);
+        $carModel = CarModel::create([
+            'model_name' => 'Sedan',
+            'daily_rate' => 80.25,
+        ]);
+        $fleetCar = FleetCar::create([
+            'vehicle_vin' => 'VIN-DELETE',
+            'car_model_id' => $carModel->id,
+        ]);
+        $rental = Rental::create([
+            'customer_id' => $customer->id,
+            'fleet_car_id' => $fleetCar->id,
+            'rental_start_date' => '2026-12-01',
+            'rental_end_date' => '2026-12-04',
+            'total_days' => 3,
+            'daily_rate' => 80.25,
+            'insurance_fee' => 0,
+            'total_rental_cost' => 240.75,
+        ]);
+        $payment = RentalPayment::create([
+            'rental_id' => $rental->id,
+            'amount' => 240.75,
+            'payment_date' => '2026-12-01',
+            'payment_method' => 'Cash',
+        ]);
+
+        $this->deleteJson("/rentals/{$rental->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Rental deleted successfully.')
+            ->assertJsonPath('data.id', $rental->id);
+
+        $this->assertDatabaseMissing('rentals', ['id' => $rental->id]);
+        $this->assertDatabaseMissing('rental_payments', ['id' => $payment->id]);
     }
 
     public function test_fleet_car_creation_page_lists_existing_vehicles_for_editing(): void

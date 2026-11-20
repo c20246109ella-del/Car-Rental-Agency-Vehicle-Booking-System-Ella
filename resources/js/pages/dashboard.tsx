@@ -80,6 +80,9 @@ export default function Dashboard({
     today: string;
 }) {
     const [editingRental, setEditingRental] = useState<RecentRental | null>(null);
+    const [deletingRental, setDeletingRental] = useState<RecentRental | null>(null);
+    const [deleteRentalError, setDeleteRentalError] = useState('');
+    const [deleteRentalProcessing, setDeleteRentalProcessing] = useState(false);
     const [form, setForm] = useState<RentalEditForm>({ fleetCarId: '', startDate: '', endDate: '' });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState('');
@@ -146,6 +149,22 @@ export default function Dashboard({
             }
         } finally {
             setProcessing(false);
+        }
+    }
+
+    async function deleteRental() {
+        if (!deletingRental) return;
+
+        setDeleteRentalError('');
+        setDeleteRentalProcessing(true);
+        try {
+            await submitJsonForm(route('rentals.destroy', deletingRental.id), {}, 'DELETE');
+            setDeletingRental(null);
+            router.reload({ only: ['recentRentals'] });
+        } catch (error) {
+            setDeleteRentalError(error instanceof Error ? error.message : 'Unable to delete the rental. Please try again.');
+        } finally {
+            setDeleteRentalProcessing(false);
         }
     }
 
@@ -239,10 +258,24 @@ export default function Dashboard({
                                             </TableCell>
                                             <TableCell className="text-right font-medium">{formatCurrency(rental.totalCost)}</TableCell>
                                             <TableCell className="text-right">
-                                                <Button variant="ghost" size="sm" onClick={() => openEditor(rental)}>
-                                                    Edit
-                                                    <span className="sr-only"> rental for {rental.customerName}</span>
-                                                </Button>
+                                                <div className="flex justify-end gap-1">
+                                                    <Button variant="ghost" size="sm" onClick={() => openEditor(rental)}>
+                                                        Edit
+                                                        <span className="sr-only"> rental for {rental.customerName}</span>
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="text-destructive hover:text-destructive"
+                                                        onClick={() => {
+                                                            setDeletingRental(rental);
+                                                            setDeleteRentalError('');
+                                                        }}
+                                                    >
+                                                        Delete
+                                                        <span className="sr-only"> rental for {rental.customerName}</span>
+                                                    </Button>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -354,6 +387,30 @@ export default function Dashboard({
                             </DialogFooter>
                         </form>
                     )}
+                </DialogContent>
+            </Dialog>
+            <Dialog open={deletingRental !== null} onOpenChange={(open) => !open && !deleteRentalProcessing && setDeletingRental(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete rental?</DialogTitle>
+                        <DialogDescription>
+                            This will permanently delete the rental for {deletingRental?.customerName} and its associated payment records. This
+                            action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {deleteRentalError && (
+                        <p role="alert" className="text-destructive text-sm">
+                            {deleteRentalError}
+                        </p>
+                    )}
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setDeletingRental(null)} disabled={deleteRentalProcessing}>
+                            Cancel
+                        </Button>
+                        <Button type="button" variant="destructive" onClick={deleteRental} disabled={deleteRentalProcessing}>
+                            {deleteRentalProcessing ? 'Deleting…' : 'Delete rental'}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
             <Dialog open={editingFleetCar !== null} onOpenChange={(open) => !open && setEditingFleetCar(null)}>
