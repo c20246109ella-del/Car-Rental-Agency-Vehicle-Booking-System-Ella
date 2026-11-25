@@ -162,6 +162,27 @@ class CarRentalService
         }
     }
 
+    private function availableFleetCarOrFail(int $fleetCarId): array
+    {
+        $fleetCar = FleetCar::withTrashed()
+            ->whereKey($fleetCarId)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        $carModel = CarModel::withTrashed()
+            ->whereKey($fleetCar->car_model_id)
+            ->lockForUpdate()
+            ->first();
+
+        if ($fleetCar->trashed() || ! $carModel || $carModel->trashed()) {
+            throw ValidationException::withMessages([
+                'fleet_car_id' => 'The selected vehicle or its car model is archived and cannot be rented.',
+            ]);
+        }
+
+        return [$fleetCar, $carModel];
+    }
+
     /*
     |--------------------------------------------------------------------------
     | Create a rental
@@ -177,10 +198,7 @@ class CarRentalService
              * for the same vehicle are less likely to conflict.
              */
 
-            $fleetCar = FleetCar::query()
-                ->whereKey($data['fleet_car_id'])
-                ->lockForUpdate()
-                ->firstOrFail();
+            [$fleetCar, $carModel] = $this->availableFleetCarOrFail((int) $data['fleet_car_id']);
 
             $this->ensureVehicleIsAvailable(
                 $fleetCar->id,
@@ -191,9 +209,6 @@ class CarRentalService
             /*
              * Retrieve the current daily rate from the car model.
              */
-
-            $carModel = CarModel::query()
-                ->findOrFail($fleetCar->car_model_id);
 
             $totalDays = $this->calculateTotalDays(
                 $data['rental_start_date'],
@@ -243,10 +258,7 @@ class CarRentalService
              * Lock the vehicle that the rental will use.
              */
 
-            $fleetCar = FleetCar::query()
-                ->whereKey($data['fleet_car_id'])
-                ->lockForUpdate()
-                ->firstOrFail();
+            [$fleetCar, $carModel] = $this->availableFleetCarOrFail((int) $data['fleet_car_id']);
 
             /*
              * Exclude this rental from the overlap check.
@@ -258,9 +270,6 @@ class CarRentalService
                 $data['rental_end_date'],
                 $rental->id
             );
-
-            $carModel = CarModel::query()
-                ->findOrFail($fleetCar->car_model_id);
 
             $totalDays = $this->calculateTotalDays(
                 $data['rental_start_date'],

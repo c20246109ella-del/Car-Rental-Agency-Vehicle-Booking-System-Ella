@@ -7,7 +7,9 @@ use App\Http\Requests\UpdateFleetCarRequest;
 use App\Models\CarModel;
 use App\Models\FleetCar;
 use App\Services\CarRentalService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,9 +29,16 @@ class FleetCarController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse|RedirectResponse
     {
-        $fleetCars = FleetCar::with('carModel')
+        if (! $request->expectsJson()) {
+            return redirect()->route('fleet-cars.create');
+        }
+
+        $fleetCars = FleetCar::query()
+            ->whereHas('carModel')
+            ->select(['id', 'vehicle_vin', 'car_model_id', 'created_at', 'updated_at'])
+            ->with('carModel:id,model_name,daily_rate')
             ->latest()
             ->paginate(10);
 
@@ -44,10 +53,16 @@ class FleetCarController extends Controller
 
     public function create(Request $request): JsonResponse|Response
     {
-        $carModels = CarModel::orderBy('model_name')->get();
-        $fleetCars = FleetCar::with('carModel:id,model_name')
+        $carModels = CarModel::query()
+            ->select(['id', 'model_name', 'daily_rate'])
+            ->orderBy('model_name')
+            ->get();
+        $fleetCars = FleetCar::query()
+            ->whereHas('carModel')
+            ->select(['id', 'vehicle_vin', 'car_model_id'])
+            ->with('carModel:id,model_name')
             ->orderBy('vehicle_vin')
-            ->get(['id', 'vehicle_vin', 'car_model_id'])
+            ->get()
             ->map(static fn (FleetCar $fleetCar): array => [
                 'id' => $fleetCar->id,
                 'vehicleVin' => $fleetCar->vehicle_vin,
@@ -106,5 +121,42 @@ class FleetCarController extends Controller
             'message' => 'Fleet car updated successfully.',
             'data' => $fleetCar,
         ]);
+    }
+
+    public function destroy(int $id): JsonResponse
+    {
+        return DB::transaction(function () use ($id): JsonResponse {
+            $fleetCar = FleetCar::query()
+                ->lockForUpdate()
+                ->findOrFail($id);
+
+            $fleetCar->delete();
+
+            return response()->json([
+                'message' => 'Fleet vehicle moved to the archive.',
+                'data' => ['id' => $id],
+            ]);
+        });
+    }
+
+    public function restore(int $id): JsonResponse
+    {
+        return DB::transaction(function () use ($id): JsonResponse {
+            $fleetCar = FleetCar::onlyTrashed()->lockForUpdate()->findOrFail($id);
+            $carModel = CarModel::withTrashed()->lockForUpdate()->findOrFail($fleetCar->car_model_id);
+
+            if ($carModel->trashed()) {
+                return response()->json([
+                    'message' => 'Restore the car model before restoring this fleet vehicle.',
+                ], 409);
+            }
+
+            $fleetCar->restore();
+
+            return response()->json([
+                'message' => 'Fleet vehicle restored successfully.',
+                'data' => ['id' => $id],
+            ]);
+        });
     }
 }

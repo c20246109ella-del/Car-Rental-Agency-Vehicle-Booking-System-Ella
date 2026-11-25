@@ -14,16 +14,22 @@ Route::get('/', function () {
     return redirect()->route('login');
 })->name('home');
 
+Route::get('/csrf-token', function () {
+    return response()->json([
+        'csrf_token' => csrf_token(),
+    ]);
+})->name('csrf-token');
+
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', function () {
         $today = now()->toDateString();
 
         $recentRentals = Rental::with([
             'customer:id,customer_name',
-            'fleetCar:id,vehicle_vin,car_model_id',
-            'fleetCar.carModel:id,model_name',
+            'fleetCar' => static fn ($query) => $query->withTrashed()->select(['id', 'vehicle_vin', 'car_model_id']),
+            'fleetCar.carModel' => static fn ($query) => $query->withTrashed()->select(['id', 'model_name']),
         ])
-            ->latest()
+            ->latest('updated_at')
             ->take(5)
             ->get()
             ->map(static function (Rental $rental) use ($today): array {
@@ -45,7 +51,8 @@ Route::middleware(['auth'])->group(function () {
                 ];
             });
 
-        $fleetCars = FleetCar::with('carModel:id,model_name')
+        $fleetCars = FleetCar::whereHas('carModel')
+            ->with('carModel:id,model_name')
             ->orderBy('vehicle_vin')
             ->get(['id', 'vehicle_vin', 'car_model_id'])
             ->map(static fn ($fleetCar): array => [
@@ -91,6 +98,12 @@ Route::post('/fleet-cars', [FleetCarController::class, 'store'])
 Route::put('/fleet-cars/{id}', [FleetCarController::class, 'update'])
     ->name('fleet-cars.update');
 
+Route::delete('/fleet-cars/{id}', [FleetCarController::class, 'destroy'])
+    ->name('fleet-cars.destroy');
+
+Route::post('/fleet-cars/{id}/restore', [FleetCarController::class, 'restore'])
+    ->name('fleet-cars.restore');
+
 Route::get('/car-models', [CarModelController::class, 'index'])
     ->name('car-models.index');
 
@@ -103,6 +116,9 @@ Route::post('/car-models', [CarModelController::class, 'store'])
 Route::delete('/car-models/{id}', [CarModelController::class, 'destroy'])
     ->name('car-models.destroy');
 
+Route::post('/car-models/{id}/restore', [CarModelController::class, 'restore'])
+    ->name('car-models.restore');
+
 // Rental Routes
 Route::get('/rentals', [RentalController::class, 'index'])
     ->name('rentals.index');
@@ -110,11 +126,17 @@ Route::get('/rentals', [RentalController::class, 'index'])
 Route::get('/rentals/create', [RentalController::class, 'create'])
     ->name('rentals.create');
 
+Route::get('/rentals/archive', [RentalController::class, 'archive'])
+    ->name('rentals.archive');
+
 Route::post('/rentals', [RentalController::class, 'store'])
     ->name('rentals.store');
 
 Route::put('/rentals/{id}', [RentalController::class, 'update'])
     ->name('rentals.update');
+
+Route::post('/rentals/{id}/restore', [RentalController::class, 'restore'])
+    ->name('rentals.restore');
 
 Route::delete('/rentals/{id}', [RentalController::class, 'destroy'])
     ->name('rentals.destroy');

@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
+import { addDaysToDate, isValidDateInput } from '@/lib/date-input';
 import { ApiFormError, submitJsonForm } from '@/lib/submit-json-form';
 
 type CustomerOption = {
@@ -50,53 +51,44 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'New rental', href: '/rentals/create' },
 ];
 
-const formatCurrency = (value: number | string) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value));
+const formatCurrency = (value: number | string) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value));
 
 function rentalDayCount(startDate: string, endDate: string) {
-    if (!startDate || !endDate) return 0;
+    if (!isValidDateInput(startDate) || !isValidDateInput(endDate)) return 0;
 
     const start = Date.parse(`${startDate}T00:00:00Z`);
     const end = Date.parse(`${endDate}T00:00:00Z`);
     return end > start ? Math.round((end - start) / 86_400_000) : 0;
 }
 
-function getTodayDate() {
-    const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${now.getFullYear()}-${month}-${day}`;
-}
-
 function getNextDate(date: string) {
-    const nextDate = new Date(`${date}T00:00:00Z`);
-    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
-    return nextDate.toISOString().slice(0, 10);
+    return addDaysToDate(date, 1) ?? '';
 }
 
 function addDays(date: string, days: number) {
-    const result = new Date(`${date}T00:00:00Z`);
-    result.setUTCDate(result.getUTCDate() + days);
-    return result.toISOString().slice(0, 10);
+    return addDaysToDate(date, days) ?? '';
 }
 
 function getLatestReturnDate(date: string) {
-    return addDays(date, 14);
+    return addDaysToDate(date, 14) ?? '';
 }
 
 export default function CreateRental({
     customers,
     fleetCars,
     carModels,
+    today,
 }: {
     customers: CustomerOption[];
     fleetCars: FleetCarOption[];
     carModels: CarModelOption[];
+    today: string;
 }) {
     const [customerId, setCustomerId] = useState('');
     const [fleetCarId, setFleetCarId] = useState('');
     const [createdFleetCars, setCreatedFleetCars] = useState<FleetCarOption[]>([]);
-    const [rentalStartDate, setRentalStartDate] = useState('');
-    const [rentalEndDate, setRentalEndDate] = useState('');
+    const [rentalStartDate, setRentalStartDate] = useState(today);
+    const [rentalEndDate, setRentalEndDate] = useState(() => getNextDate(today));
     const [insuranceFee, setInsuranceFee] = useState('0');
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [processing, setProcessing] = useState(false);
@@ -116,10 +108,27 @@ export default function CreateRental({
     const parsedInsuranceFee = Number(insuranceFee);
     const totalEstimate = dailyRate * totalDays + (Number.isFinite(parsedInsuranceFee) ? parsedInsuranceFee : 0);
     const hasOptions = customers.length > 0 && availableFleetCars.length > 0;
-    const today = getTodayDate();
-
     async function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
+        if (!isValidDateInput(rentalStartDate) || !isValidDateInput(rentalEndDate)) {
+            setErrors({
+                rental_start_date: isValidDateInput(rentalStartDate) ? '' : 'Enter a valid pickup date.',
+                rental_end_date: isValidDateInput(rentalEndDate) ? '' : 'Enter a valid return date.',
+            });
+            return;
+        }
+
+        const normalizedInsuranceFee = insuranceFee.startsWith('.')
+            ? `0${insuranceFee}`
+            : insuranceFee.endsWith('.')
+              ? insuranceFee.slice(0, -1)
+              : insuranceFee;
+
+        if (!/^\d{1,6}(?:\.\d{1,2})?$/.test(normalizedInsuranceFee) || Number(normalizedInsuranceFee) > 100000) {
+            setErrors({ insurance_fee: 'Insurance fee cannot exceed ₱100,000.00 and may have up to 2 decimal places.' });
+            return;
+        }
+
         setErrors({});
         setFormError('');
         setSuccess('');
@@ -131,13 +140,13 @@ export default function CreateRental({
                 fleet_car_id: fleetCarId,
                 rental_start_date: rentalStartDate,
                 rental_end_date: rentalEndDate,
-                insurance_fee: insuranceFee,
+                insurance_fee: normalizedInsuranceFee,
             });
             setSuccess(result.message ?? 'Rental created successfully.');
             setCustomerId('');
             setFleetCarId('');
-            setRentalStartDate('');
-            setRentalEndDate('');
+            setRentalStartDate(today);
+            setRentalEndDate(getNextDate(today));
             setInsuranceFee('0');
         } catch (error) {
             if (error instanceof ApiFormError) {
@@ -271,29 +280,25 @@ export default function CreateRental({
                             <CardContent className="pt-6">
                                 <div className="grid gap-2">
                                     <Label htmlFor="customer_id">Customer</Label>
-                                    <Select
+                                    <select
+                                        id="customer_id"
                                         value={customerId}
-                                        onValueChange={(value) => {
-                                            setCustomerId(value);
+                                        onChange={(event) => {
+                                            setCustomerId(event.target.value);
                                             setErrors((current) => ({ ...current, customer_id: '' }));
                                         }}
                                         disabled={customers.length === 0}
+                                        aria-invalid={Boolean(errors.customer_id)}
+                                        aria-describedby={errors.customer_id ? 'customer_id-error' : undefined}
+                                        className="border-input bg-background ring-offset-background focus:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
-                                        <SelectTrigger
-                                            id="customer_id"
-                                            aria-invalid={Boolean(errors.customer_id)}
-                                            aria-describedby={errors.customer_id ? 'customer_id-error' : undefined}
-                                        >
-                                            <SelectValue placeholder="Select a customer" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {customers.map((customer) => (
-                                                <SelectItem key={customer.id} value={String(customer.id)}>
-                                                    {customer.customer_name} · {customer.driver_license}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                        <option value="">Select a customer</option>
+                                        {customers.map((customer) => (
+                                            <option key={customer.id} value={String(customer.id)}>
+                                                {customer.customer_name} · {customer.driver_license}
+                                            </option>
+                                        ))}
+                                    </select>
                                     <InputError id="customer_id-error" message={errors.customer_id} />
                                 </div>
                             </CardContent>
@@ -367,7 +372,7 @@ export default function CreateRental({
                                                     onClick={() => {
                                                         setRentalStartDate(date);
                                                         if (rentalEndDate && (rentalEndDate <= date || rentalEndDate > getLatestReturnDate(date))) {
-                                                            setRentalEndDate('');
+                                                            setRentalEndDate(getNextDate(date));
                                                         }
                                                         setErrors((current) => ({ ...current, rental_start_date: '', rental_end_date: '' }));
                                                     }}
@@ -380,14 +385,17 @@ export default function CreateRental({
                                             id="rental_start_date"
                                             type="date"
                                             min={today}
+                                            max="9999-12-17"
                                             value={rentalStartDate}
                                             onChange={(event) => {
-                                                setRentalStartDate(event.target.value);
+                                                const startDate = isValidDateInput(event.target.value) ? event.target.value : '';
+                                                setRentalStartDate(startDate);
                                                 if (
-                                                    rentalEndDate &&
-                                                    (event.target.value >= rentalEndDate || rentalEndDate > getLatestReturnDate(event.target.value))
+                                                    !startDate ||
+                                                    (rentalEndDate &&
+                                                        (startDate >= rentalEndDate || rentalEndDate > getLatestReturnDate(startDate)))
                                                 ) {
-                                                    setRentalEndDate('');
+                                                    setRentalEndDate(startDate ? getNextDate(startDate) : '');
                                                 }
                                                 setErrors((current) => ({ ...current, rental_start_date: '', rental_end_date: '' }));
                                             }}
@@ -420,11 +428,11 @@ export default function CreateRental({
                                         <Input
                                             id="rental_end_date"
                                             type="date"
-                                            min={rentalStartDate ? getNextDate(rentalStartDate) : today}
-                                            max={rentalStartDate ? getLatestReturnDate(rentalStartDate) : undefined}
+                                            min={isValidDateInput(rentalStartDate) ? getNextDate(rentalStartDate) : today}
+                                            max={isValidDateInput(rentalStartDate) ? getLatestReturnDate(rentalStartDate) : '9999-12-31'}
                                             value={rentalEndDate}
                                             onChange={(event) => {
-                                                setRentalEndDate(event.target.value);
+                                                setRentalEndDate(isValidDateInput(event.target.value) ? event.target.value : '');
                                                 setErrors((current) => ({ ...current, rental_end_date: '' }));
                                             }}
                                             aria-invalid={Boolean(errors.rental_end_date)}
@@ -480,15 +488,22 @@ export default function CreateRental({
                                     <div className="grid gap-2">
                                         <Label htmlFor="insurance_fee">Insurance fee</Label>
                                         <div className="relative">
-                                            <span className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2 text-sm">$</span>
+                                            <span className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2 text-sm">₱</span>
                                             <Input
                                                 id="insurance_fee"
                                                 className="pl-7"
-                                                type="number"
-                                                min="0"
-                                                step="0.01"
+                                                type="text"
+                                                inputMode="decimal"
+                                                maxLength={9}
                                                 value={insuranceFee}
-                                                onChange={(event) => setInsuranceFee(event.target.value)}
+                                                onChange={(event) => {
+                                                    const value = event.target.value;
+                                                    if (/^(?:\d{0,6}(?:\.\d{0,2})?|\.\d{0,2})?$/.test(value)) {
+                                                        setInsuranceFee(value);
+                                                        setErrors((current) => ({ ...current, insurance_fee: '' }));
+                                                    }
+                                                }}
+                                                placeholder="0.00"
                                                 aria-invalid={Boolean(errors.insurance_fee)}
                                                 aria-describedby={errors.insurance_fee ? 'insurance_fee-error' : undefined}
                                                 required

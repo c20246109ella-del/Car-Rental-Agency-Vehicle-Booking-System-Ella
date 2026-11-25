@@ -5,9 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
+import { addDaysToDate, isValidDateInput } from '@/lib/date-input';
 import { ApiFormError, submitJsonForm } from '@/lib/submit-json-form';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
@@ -60,12 +60,10 @@ type RentalEditForm = {
 const formatDate = (date: string) =>
     new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`));
 
-const formatCurrency = (value: string) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value));
+const formatCurrency = (value: string) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value));
 
 function nextDate(date: string) {
-    const tomorrow = new Date(`${date}T00:00:00Z`);
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-    return tomorrow.toISOString().slice(0, 10);
+    return addDaysToDate(date, 1) ?? '';
 }
 
 export default function Dashboard({
@@ -92,9 +90,11 @@ export default function Dashboard({
     const [fleetCarErrors, setFleetCarErrors] = useState<Record<string, string>>({});
     const [fleetCarFormError, setFleetCarFormError] = useState('');
     const [fleetCarProcessing, setFleetCarProcessing] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
 
     function openEditor(rental: RecentRental) {
         setEditingRental(rental);
+        setSuccessMessage('');
         setForm({
             fleetCarId: String(rental.fleetCarId),
             startDate: rental.startDate,
@@ -109,13 +109,17 @@ export default function Dashboard({
         if (!editingRental) return;
 
         const validationErrors: Record<string, string> = {};
-        if (form.startDate < today && form.startDate !== editingRental.startDate) {
+        if (!isValidDateInput(form.startDate)) {
+            validationErrors.rental_start_date = 'Enter a valid pickup date.';
+        } else if (form.startDate < today && form.startDate !== editingRental.startDate) {
             validationErrors.rental_start_date = 'The pickup date cannot be in the past.';
         }
-        if (form.endDate < today && form.endDate !== editingRental.endDate) {
+        if (!isValidDateInput(form.endDate)) {
+            validationErrors.rental_end_date = 'Enter a valid return date.';
+        } else if (form.endDate < today && form.endDate !== editingRental.endDate) {
             validationErrors.rental_end_date = 'The return date cannot be in the past.';
         }
-        if (form.startDate && form.endDate <= form.startDate) {
+        if (isValidDateInput(form.startDate) && isValidDateInput(form.endDate) && form.endDate <= form.startDate) {
             validationErrors.rental_end_date = 'The return date must be after the pickup date.';
         }
         if (Object.keys(validationErrors).length > 0) {
@@ -139,7 +143,8 @@ export default function Dashboard({
                 'PUT',
             );
             setEditingRental(null);
-            router.reload({ only: ['recentRentals'] });
+            setSuccessMessage('Rental changes saved.');
+            router.reload({ only: ['recentRentals', 'fleetCars', 'carModels', 'today'] });
         } catch (error) {
             if (error instanceof ApiFormError) {
                 setErrors(error.errors);
@@ -170,6 +175,7 @@ export default function Dashboard({
 
     function openFleetCarEditor(fleetCar: FleetCarOption) {
         setEditingFleetCar(fleetCar);
+        setSuccessMessage('');
         setFleetCarForm({ vehicleVin: fleetCar.vehicleVin, carModelId: String(fleetCar.carModelId) });
         setFleetCarErrors({});
         setFleetCarFormError('');
@@ -192,7 +198,8 @@ export default function Dashboard({
                 'PUT',
             );
             setEditingFleetCar(null);
-            router.reload({ only: ['fleetCars'] });
+            setSuccessMessage('Vehicle changes saved.');
+            router.reload({ only: ['recentRentals', 'fleetCars', 'carModels', 'today'] });
         } catch (error) {
             if (error instanceof ApiFormError) {
                 setFleetCarErrors(error.errors);
@@ -213,6 +220,11 @@ export default function Dashboard({
                     <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
                     <p className="text-muted-foreground">A quick look at the latest vehicle rentals.</p>
                 </header>
+                {successMessage && (
+                    <p role="status" className="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-700">
+                        {successMessage}
+                    </p>
+                )}
 
                 <Card>
                     <CardHeader>
@@ -337,18 +349,19 @@ export default function Dashboard({
                             )}
                             <div className="space-y-2">
                                 <Label htmlFor="edit-fleet-car">Vehicle</Label>
-                                <Select value={form.fleetCarId} onValueChange={(fleetCarId) => setForm((current) => ({ ...current, fleetCarId }))}>
-                                    <SelectTrigger id="edit-fleet-car">
-                                        <SelectValue placeholder="Select a vehicle" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {fleetCars.map((fleetCar) => (
-                                            <SelectItem key={fleetCar.id} value={String(fleetCar.id)}>
-                                                {fleetCar.carModel} · {fleetCar.vehicleVin}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <select
+                                    id="edit-fleet-car"
+                                    value={form.fleetCarId}
+                                    onChange={(event) => setForm((current) => ({ ...current, fleetCarId: event.target.value }))}
+                                    className="border-input bg-background ring-offset-background focus:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-offset-2"
+                                >
+                                    <option value="">Select a vehicle</option>
+                                    {fleetCars.map((fleetCar) => (
+                                        <option key={fleetCar.id} value={String(fleetCar.id)}>
+                                            {fleetCar.carModel} · {fleetCar.vehicleVin}
+                                        </option>
+                                    ))}
+                                </select>
                                 <InputError message={errors.fleet_car_id} />
                             </div>
                             <div className="grid gap-4 sm:grid-cols-2">
@@ -358,8 +371,15 @@ export default function Dashboard({
                                         id="edit-rental-start"
                                         type="date"
                                         min={today}
+                                        max="9999-12-17"
                                         value={form.startDate}
-                                        onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))}
+                                        onChange={(event) =>
+                                            setForm((current) => ({
+                                                ...current,
+                                                startDate: isValidDateInput(event.target.value) ? event.target.value : '',
+                                            }))
+                                        }
+                                        required
                                         aria-invalid={Boolean(errors.rental_start_date)}
                                     />
                                     <InputError message={errors.rental_start_date} />
@@ -369,9 +389,16 @@ export default function Dashboard({
                                     <Input
                                         id="edit-rental-end"
                                         type="date"
-                                        min={form.startDate > today ? nextDate(form.startDate) : today}
+                                        min={isValidDateInput(form.startDate) && form.startDate > today ? nextDate(form.startDate) : today}
+                                        max="9999-12-31"
                                         value={form.endDate}
-                                        onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))}
+                                        onChange={(event) =>
+                                            setForm((current) => ({
+                                                ...current,
+                                                endDate: isValidDateInput(event.target.value) ? event.target.value : '',
+                                            }))
+                                        }
+                                        required
                                         aria-invalid={Boolean(errors.rental_end_date)}
                                     />
                                     <InputError message={errors.rental_end_date} />
@@ -440,21 +467,20 @@ export default function Dashboard({
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="edit-car-model">Car model</Label>
-                                <Select
+                                <select
+                                    id="edit-car-model"
                                     value={fleetCarForm.carModelId}
-                                    onValueChange={(carModelId) => setFleetCarForm((current) => ({ ...current, carModelId }))}
+                                    onChange={(event) => setFleetCarForm((current) => ({ ...current, carModelId: event.target.value }))}
+                                    aria-invalid={Boolean(fleetCarErrors.car_model_id)}
+                                    className="border-input bg-background ring-offset-background focus:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-offset-2"
                                 >
-                                    <SelectTrigger id="edit-car-model" aria-invalid={Boolean(fleetCarErrors.car_model_id)}>
-                                        <SelectValue placeholder="Choose a model" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {carModels.map((carModel) => (
-                                            <SelectItem key={carModel.id} value={String(carModel.id)}>
-                                                {carModel.modelName}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                    <option value="">Choose a model</option>
+                                    {carModels.map((carModel) => (
+                                        <option key={carModel.id} value={String(carModel.id)}>
+                                            {carModel.modelName}
+                                        </option>
+                                    ))}
+                                </select>
                                 <InputError message={fleetCarErrors.car_model_id} />
                             </div>
                             <DialogFooter>

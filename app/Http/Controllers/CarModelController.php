@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateCarModelRequest;
 use App\Models\CarModel;
 use App\Services\CarRentalService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class CarModelController extends Controller
 {
@@ -50,18 +51,26 @@ class CarModelController extends Controller
 
     public function destroy(int $id): JsonResponse
     {
-        $carModel = CarModel::query()->findOrFail($id);
-
-        if ($carModel->fleetCars()->exists()) {
-            return response()->json([
-                'message' => 'Cannot delete this car model because it is currently assigned to one or more fleet cars.',
-            ], 409);
-        }
-
-        $carModel->delete();
+        DB::transaction(function () use ($id): void {
+            $carModel = CarModel::query()->lockForUpdate()->findOrFail($id);
+            $carModel->delete();
+        });
 
         return response()->json([
-            'message' => 'Car model deleted successfully.',
+            'message' => 'Car model moved to the archive.',
+            'data' => ['id' => $id],
+        ]);
+    }
+
+    public function restore(int $id): JsonResponse
+    {
+        DB::transaction(function () use ($id): void {
+            $carModel = CarModel::onlyTrashed()->lockForUpdate()->findOrFail($id);
+            $carModel->restore();
+        });
+
+        return response()->json([
+            'message' => 'Car model restored successfully.',
             'data' => ['id' => $id],
         ]);
     }

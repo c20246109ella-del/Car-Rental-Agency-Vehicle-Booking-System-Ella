@@ -30,14 +30,14 @@ class UpdateFleetCarRequest extends FormRequest
             'vehicle_vin' => [
                 'required',
                 'string',
-                'max:50',
+                'size:17',
                 Rule::unique('fleet_cars', 'vehicle_vin')->ignore($id),
             ],
 
             'car_model_id' => [
                 'required',
                 'integer',
-                'exists:car_models,id',
+                Rule::exists('car_models', 'id')->whereNull('deleted_at'),
             ],
         ];
     }
@@ -46,6 +46,7 @@ class UpdateFleetCarRequest extends FormRequest
     {
         return [
             'vehicle_vin.required' => 'The vehicle VIN is required.',
+            'vehicle_vin.size' => 'The VIN must be exactly 17 characters.',
             'vehicle_vin.unique' => 'This VIN belongs to another vehicle.',
             'car_model_id.required' => 'Please select a car model.',
             'car_model_id.exists' => 'The selected car model does not exist.',

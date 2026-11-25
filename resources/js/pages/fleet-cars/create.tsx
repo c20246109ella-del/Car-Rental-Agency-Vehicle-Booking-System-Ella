@@ -1,7 +1,7 @@
 import { type BreadcrumbItem } from '@/types';
 import { TruckIcon } from '@heroicons/react/24/outline';
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, CarFront, CheckCircle2, CircleHelp, LoaderCircle } from 'lucide-react';
+import { ArrowLeft, CarFront, CheckCircle2, CircleHelp, LoaderCircle, Trash2 } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
 
 import InputError from '@/components/input-error';
@@ -41,10 +41,10 @@ type CarModelEditForm = {
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Fleet cars', href: '/fleet-cars' },
-    { title: 'Add vehicle', href: '/fleet-cars/create' },
+    { title: 'Add fleet car', href: '/fleet-cars/create' },
 ];
 
-const formatCurrency = (value: string | number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value));
+const formatCurrency = (value: string | number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value));
 
 export default function CreateFleetCar({ carModels, fleetCars }: { carModels: CarModelOption[]; fleetCars: FleetCarOption[] }) {
     const [vehicleVin, setVehicleVin] = useState('');
@@ -60,11 +60,17 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
     const [editErrors, setEditErrors] = useState<Record<string, string>>({});
     const [editFormError, setEditFormError] = useState('');
     const [editProcessing, setEditProcessing] = useState(false);
+    const [deletingFleetCar, setDeletingFleetCar] = useState<FleetCarOption | null>(null);
+    const [deleteFleetCarError, setDeleteFleetCarError] = useState('');
+    const [deleteFleetCarProcessing, setDeleteFleetCarProcessing] = useState(false);
     const [editingCarModel, setEditingCarModel] = useState<CarModelOption | null>(null);
     const [carModelForm, setCarModelForm] = useState<CarModelEditForm>({ modelName: '', dailyRate: '' });
     const [carModelErrors, setCarModelErrors] = useState<Record<string, string>>({});
     const [carModelFormError, setCarModelFormError] = useState('');
     const [carModelProcessing, setCarModelProcessing] = useState(false);
+    const [deletingCarModel, setDeletingCarModel] = useState<CarModelOption | null>(null);
+    const [deleteCarModelError, setDeleteCarModelError] = useState('');
+    const [deleteCarModelProcessing, setDeleteCarModelProcessing] = useState(false);
     const [addingCarModel, setAddingCarModel] = useState(false);
     const [newCarModelForm, setNewCarModelForm] = useState<CarModelEditForm>({ modelName: '', dailyRate: '' });
     const [newCarModelErrors, setNewCarModelErrors] = useState<Record<string, string>>({});
@@ -141,6 +147,24 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
         }
     }
 
+    async function deleteFleetCar() {
+        if (!deletingFleetCar) return;
+
+        setDeleteFleetCarError('');
+        setDeleteFleetCarProcessing(true);
+        try {
+            const result = await submitJsonForm(route('fleet-cars.destroy', deletingFleetCar.id), {}, 'DELETE');
+            setSuccessTitle('Vehicle archived');
+            setSuccess(result.message ?? 'Fleet vehicle moved to the archive.');
+            setDeletingFleetCar(null);
+            router.reload({ only: ['fleetCars'] });
+        } catch (error) {
+            setDeleteFleetCarError(error instanceof Error ? error.message : 'Unable to delete the vehicle. Please try again.');
+        } finally {
+            setDeleteFleetCarProcessing(false);
+        }
+    }
+
     function openCarModelEditor(carModel: CarModelOption) {
         setEditingCarModel(carModel);
         setCarModelForm({ modelName: carModel.model_name, dailyRate: carModel.daily_rate });
@@ -177,6 +201,24 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
             }
         } finally {
             setCarModelProcessing(false);
+        }
+    }
+
+    async function deleteCarModel() {
+        if (!deletingCarModel) return;
+
+        setDeleteCarModelError('');
+        setDeleteCarModelProcessing(true);
+        try {
+            const result = await submitJsonForm(route('car-models.destroy', deletingCarModel.id), {}, 'DELETE');
+            setSuccessTitle('Car model archived');
+            setSuccess(result.message ?? 'Car model moved to the archive.');
+            setDeletingCarModel(null);
+            router.reload({ only: ['carModels', 'fleetCars'] });
+        } catch (error) {
+            setDeleteCarModelError(error instanceof Error ? error.message : 'Unable to delete the car model. Please try again.');
+        } finally {
+            setDeleteCarModelProcessing(false);
         }
     }
 
@@ -287,8 +329,9 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
                                             name="vehicle_vin"
                                             value={vehicleVin}
                                             onChange={(event) => setVehicleVin(event.target.value)}
-                                            placeholder="e.g. 1HGCM82633A004352"
-                                            maxLength={50}
+                                            placeholder="17 characters, e.g. 1HGCM82633A004352"
+                                            minLength={17}
+                                            maxLength={17}
                                             autoComplete="off"
                                             aria-invalid={Boolean(errors.vehicle_vin)}
                                             aria-describedby={errors.vehicle_vin ? 'vehicle_vin-error' : undefined}
@@ -400,10 +443,25 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
                                             <TableCell className="font-medium">{fleetCar.carModel}</TableCell>
                                             <TableCell className="font-mono text-sm">{fleetCar.vehicleVin}</TableCell>
                                             <TableCell className="text-right">
-                                                <Button variant="ghost" size="sm" onClick={() => openFleetCarEditor(fleetCar)}>
-                                                    Edit
-                                                    <span className="sr-only"> vehicle {fleetCar.vehicleVin}</span>
-                                                </Button>
+                                                <div className="flex justify-end gap-1">
+                                                    <Button variant="ghost" size="sm" onClick={() => openFleetCarEditor(fleetCar)}>
+                                                        Edit
+                                                        <span className="sr-only"> vehicle {fleetCar.vehicleVin}</span>
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="text-destructive hover:text-destructive"
+                                                        onClick={() => {
+                                                            setDeletingFleetCar(fleetCar);
+                                                            setDeleteFleetCarError('');
+                                                        }}
+                                                    >
+                                                        <Trash2 className="size-4" />
+                                                        Archive
+                                                        <span className="sr-only"> vehicle {fleetCar.vehicleVin}</span>
+                                                    </Button>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -441,10 +499,25 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
                                                 <TableCell className="font-medium">{carModel.model_name}</TableCell>
                                                 <TableCell>{formatCurrency(carModel.daily_rate)}</TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button variant="ghost" size="sm" onClick={() => openCarModelEditor(carModel)}>
-                                                        Edit
-                                                        <span className="sr-only"> model {carModel.model_name}</span>
-                                                    </Button>
+                                                    <div className="flex justify-end gap-1">
+                                                        <Button variant="ghost" size="sm" onClick={() => openCarModelEditor(carModel)}>
+                                                            Edit
+                                                            <span className="sr-only"> model {carModel.model_name}</span>
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="text-destructive hover:text-destructive"
+                                                            onClick={() => {
+                                                                setDeletingCarModel(carModel);
+                                                                setDeleteCarModelError('');
+                                                            }}
+                                                        >
+                                                            <Trash2 className="size-4" />
+                                                            Archive
+                                                            <span className="sr-only"> model {carModel.model_name}</span>
+                                                        </Button>
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -483,7 +556,8 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
                                     id="edit-vehicle-vin"
                                     value={editForm.vehicleVin}
                                     onChange={(event) => setEditForm((current) => ({ ...current, vehicleVin: event.target.value }))}
-                                    maxLength={50}
+                                    minLength={17}
+                                    maxLength={17}
                                     required
                                     aria-invalid={Boolean(editErrors.vehicle_vin)}
                                 />
@@ -518,6 +592,37 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
                             </DialogFooter>
                         </form>
                     )}
+                </DialogContent>
+            </Dialog>
+            <Dialog
+                open={deletingFleetCar !== null}
+                onOpenChange={(open) => !open && !deleteFleetCarProcessing && setDeletingFleetCar(null)}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Archive fleet vehicle?</DialogTitle>
+                        <DialogDescription>
+                            {deletingFleetCar?.vehicleVin} will be moved to the archive. Its rental history will be retained, and it cannot be rented while archived.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {deleteFleetCarError && (
+                        <p role="alert" className="text-destructive text-sm">
+                            {deleteFleetCarError}
+                        </p>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setDeletingFleetCar(null)}
+                            disabled={deleteFleetCarProcessing}
+                        >
+                            Cancel
+                        </Button>
+                        <Button type="button" variant="destructive" onClick={deleteFleetCar} disabled={deleteFleetCarProcessing}>
+                            {deleteFleetCarProcessing ? 'Archiving…' : 'Archive vehicle'}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
             <Dialog open={editingCarModel !== null} onOpenChange={(open) => !open && setEditingCarModel(null)}>
@@ -569,6 +674,37 @@ export default function CreateFleetCar({ carModels, fleetCars }: { carModels: Ca
                             </DialogFooter>
                         </form>
                     )}
+                </DialogContent>
+            </Dialog>
+            <Dialog
+                open={deletingCarModel !== null}
+                onOpenChange={(open) => !open && !deleteCarModelProcessing && setDeletingCarModel(null)}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Archive car model?</DialogTitle>
+                        <DialogDescription>
+                            {deletingCarModel?.model_name} will be moved to the archive. Vehicles using this model will be unavailable for new rentals until it is restored.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {deleteCarModelError && (
+                        <p role="alert" className="text-destructive text-sm">
+                            {deleteCarModelError}
+                        </p>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setDeletingCarModel(null)}
+                            disabled={deleteCarModelProcessing}
+                        >
+                            Cancel
+                        </Button>
+                        <Button type="button" variant="destructive" onClick={deleteCarModel} disabled={deleteCarModelProcessing}>
+                            {deleteCarModelProcessing ? 'Archiving…' : 'Archive model'}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
             <Dialog open={addingCarModel} onOpenChange={setAddingCarModel}>

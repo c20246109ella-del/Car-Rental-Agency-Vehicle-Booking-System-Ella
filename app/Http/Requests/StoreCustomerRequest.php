@@ -28,11 +28,19 @@ class StoreCustomerRequest extends FormRequest
             'driver_license' => [
                 'required',
                 'string',
-                'max:50',
+                'max:13',
                 Rule::unique('customers', 'driver_license'),
             ],
             'customer_name' => ['required', 'string', 'max:100'],
-            'customer_phone' => ['required', 'string', 'max:20'],
+            'customer_phone' => ['required', 'string', 'max:11'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'driver_license.max' => 'The driver license must not exceed 13 characters.',
+            'customer_phone.max' => 'The phone number must not exceed 11 characters.',
         ];
     }
 }

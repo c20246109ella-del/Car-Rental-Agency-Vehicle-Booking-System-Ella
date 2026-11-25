@@ -105,7 +105,7 @@ export default function CreateCustomer() {
                                     id="driver_license"
                                     value={driverLicense}
                                     onChange={(event) => setDriverLicense(event.target.value)}
-                                    maxLength={50}
+                                    maxLength={13}
                                     autoComplete="off"
                                     aria-invalid={Boolean(errors.driver_license)}
                                     aria-describedby={errors.driver_license ? 'driver_license-error' : undefined}
@@ -136,7 +136,7 @@ export default function CreateCustomer() {
                                     type="tel"
                                     value={customerPhone}
                                     onChange={(event) => setCustomerPhone(event.target.value)}
-                                    maxLength={20}
+                                    maxLength={11}
                                     autoComplete="tel"
                                     aria-invalid={Boolean(errors.customer_phone)}
                                     aria-describedby={errors.customer_phone ? 'customer_phone-error' : undefined}

@@ -19,21 +19,43 @@ export async function submitJsonForm<TData = unknown>(
     data: Record<string, string>,
     method: 'POST' | 'PUT' | 'DELETE' = 'POST',
 ): Promise<ApiResponse<TData>> {
-    const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+    const submit = async (csrfToken: string): Promise<Response> =>
+        fetch(url, {
+            method,
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            body: JSON.stringify(data),
+        });
+
+    let csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
 
     if (!csrfToken) {
         throw new Error('The security token is missing. Refresh the page and try again.');
     }
 
-    const response = await fetch(url, {
-        method,
-        headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': csrfToken,
-        },
-        body: JSON.stringify(data),
-    });
+    let response = await submit(csrfToken);
+
+    if (response.status === 419) {
+        const tokenResponse = await fetch('/csrf-token', {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+
+        if (tokenResponse.ok) {
+            const tokenPayload = await tokenResponse.json() as { csrf_token?: string };
+            csrfToken = tokenPayload.csrf_token;
+
+            if (csrfToken) {
+                const metaToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
+                metaToken?.setAttribute('content', csrfToken);
+                response = await submit(csrfToken);
+            }
+        }
+    }
 
     let payload: ApiResponse<TData>;
 

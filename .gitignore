@@ -23,3 +23,6 @@ Homestead.json
 Homestead.yaml
 npm-debug.log
 yarn-error.log
+
+# EnvKit — per-project PHP error log (do not commit)
+php_error.log

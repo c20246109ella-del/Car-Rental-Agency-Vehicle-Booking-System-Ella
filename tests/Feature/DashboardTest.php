@@ -27,6 +27,54 @@ class DashboardTest extends TestCase
         $this->get('/dashboard')->assertOk();
     }
 
+    public function test_dashboard_rental_updates_are_saved_to_the_database(): void
+    {
+        $customer = Customer::create([
+            'driver_license' => 'DL-DASH-RENTAL',
+            'customer_name' => 'Dashboard Renter',
+            'customer_phone' => '555-0101',
+        ]);
+        $carModel = CarModel::create([
+            'model_name' => 'Dashboard Sedan',
+            'daily_rate' => 75,
+        ]);
+        $originalFleetCar = FleetCar::create([
+            'vehicle_vin' => 'VIN-DASH-OLD',
+            'car_model_id' => $carModel->id,
+        ]);
+        $updatedFleetCar = FleetCar::create([
+            'vehicle_vin' => 'VIN-DASH-NEW',
+            'car_model_id' => $carModel->id,
+        ]);
+        $rental = Rental::create([
+            'customer_id' => $customer->id,
+            'fleet_car_id' => $originalFleetCar->id,
+            'rental_start_date' => now()->toDateString(),
+            'rental_end_date' => now()->addDays(2)->toDateString(),
+            'total_days' => 2,
+            'daily_rate' => 75,
+            'insurance_fee' => 10,
+            'total_rental_cost' => 160,
+        ]);
+
+        $this->actingAs(User::factory()->create())
+            ->putJson("/rentals/{$rental->id}", [
+                'customer_id' => $customer->id,
+                'fleet_car_id' => $updatedFleetCar->id,
+                'rental_start_date' => now()->toDateString(),
+                'rental_end_date' => now()->addDays(3)->toDateString(),
+                'insurance_fee' => '20',
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('rentals', [
+            'id' => $rental->id,
+            'fleet_car_id' => $updatedFleetCar->id,
+            'total_days' => 3,
+            'total_rental_cost' => '245.00',
+        ]);
+    }
+
     public function test_dashboard_displays_the_latest_rentals(): void
     {
         $customer = Customer::create([
